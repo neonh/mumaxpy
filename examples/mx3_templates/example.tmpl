@@ -1,0 +1,92 @@
+
+//----------------------------- GRID -----------------------------------------//
+SetGridSize(gridN_x, gridN_y, gridN_z)
+SetCellSize(gridSize_x/gridN_x, gridSize_y/gridN_y, gridSize_z/gridN_z)
+SetPBC(pbc_x, pbc_y, pbc_z)
+
+
+//----------------------------- GEOMETRY -------------------------------------//
+disk := Cylinder(Ddisk, h_film)
+geometryShape := disk
+
+edgeSmooth = 8
+SetGeom(geometryShape)
+Save(geom)
+
+
+//----------------------------- REGIONS --------------------------------------//
+DefRegion(1, disk)
+
+Save(regions)
+
+
+//----------------------------- OUTPUT --------------------------------------//
+TableAdd(m.Region(1))
+TableAdd(E_total)
+
+// MaxAngle should be small enough during the simulation
+TableAdd(MaxAngle)
+TableAutoSave(tableSavePeriod)
+
+
+//----------------------------- MATERIAL PARAMETERS --------------------------//
+// Landau-Lifshitz damping constant
+alpha = alpha_Gilbert
+// Exchange stiffness (J/m)
+Aex = A_ex
+// Saturation magnetization (A/m)
+Msat = fourPiMs / 4 / Pi
+// Uniaxial anisotropy constants (J/m3)
+Ku1 = Ku_1
+Ku2 = Ku_2
+// Cubic anisotropy constants (J/m3)
+Kc1 = Kc_1
+Kc2 = Kc_2
+Kc3 = Kc_3
+
+// Uniaxial anisotorpy directon
+anisU = Vector(0, 0, 1)
+// Cubic anisotorpy directon
+anisC1 = Vector(1, 0, 0)
+anisC2 = Vector(0, 1, 0)
+
+
+//----------------------------- INITIAL MAGNETIZATION ------------------------//
+m = Uniform(0, 0, 1)
+
+
+//----------------------------- EXCITATIONS ----------------------------------//
+B_static := Vector(0, 0, B)
+// Pump
+B_ext = Vector(Hf*sin(2*Pi*freq*t), 0, B)
+
+
+//----------------------------- SOLVER SETTINGS ------------------------------//
+maxDt = max_dt
+
+
+//----------------------------- RELAX/MINIMIZE -------------------------------//
+// LLG without precession
+Relax()
+// OR
+// Steepest descent
+//Minimize()
+
+
+//----------------------------- RUN ------------------------------------------//
+// Pump is ON - wait for quasistationary oscillations
+Run(quasystationaryTime)
+
+if (saveOVF == 1) {
+    AutoSave(m, ovfSavePeriod)
+}
+// Pump is ON - measurement
+Run(measureTime)
+
+// Pump is OFF - relaxation
+B_ext.RemoveExtraTerms()
+B_ext = B_static
+Run(relaxTime)
+
+
+//----------------------------- END ------------------------------------------//

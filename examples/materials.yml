@@ -1,0 +1,24 @@
+---
+# Material parameters:
+#   4piMs - Saturation magnetization [G],
+#   Ku1, Ku2 - uniaxial anisotropy constants [erg/cm^3],
+#   Kc1, Kc2, Kc3 - cubic anisotropy constants [erg/cm^3],
+#   alpha - Landau-Lifshitz damping constant,
+#   Aex - Exchange stiffness [J/m].
+#
+# For example:
+SomeMaterialName:
+   4piMs: 1750
+   Ku1:   6100
+   alpha: 0.0005
+   Aex:   3.7e-12
+# Unspecified parameters will be 0.
+
+
+#------------------------------------------------------------------------------#
+# Yttrium iron garnet
+YIG:
+    4piMs: 1750
+    Ku1:   6100
+    alpha: 0.0005
+    Aex:   3.7e-12
