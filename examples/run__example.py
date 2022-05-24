@@ -1,5 +1,5 @@
 """
-Script for automated run of Mumax3 simulations
+Script for automated running of Mumax3 simulations
 """
 import os
 import glob
@@ -223,9 +223,12 @@ def post_processing(result_dir: str, p: Parameters):
     None
     """
     def add_disk_plot(ax):
-        circle = plt.Circle((0, 0), p.Ddisk.value/2, color='black', fill=False)
+        # Plot circles for disks
+        d = p.Ddisk.to('um').value
+        circle = plt.Circle((0, 0), d/2, color='black', fill=False)
         ax.add_patch(circle)
 
+    # Load all .mat files in result_dir and subdirs
     mat_files = glob.glob(os.path.join(result_dir, "**", "*.mat"),
                           recursive=True)
 
