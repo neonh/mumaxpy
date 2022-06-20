@@ -21,11 +21,12 @@ X, Y, Z, ALL = 'x', 'y', 'z', ''
 XYZ = [X, Y, Z]
 
 TABLES = 'tables'
+RESULTS = 'results'
 PLOTS = 'plots'
 SCRIPTS = 'scripts'
 MAT_FILES = 'mat_files'
 SUB_DIRS = [TABLES, SCRIPTS]
-OPT_SUB_DIRS = [PLOTS, MAT_FILES]
+OPT_SUB_DIRS = [RESULTS, PLOTS, MAT_FILES]
 
 MAX_ANGLE = 'MaxAngle'
 
@@ -192,6 +193,8 @@ class Simulation:
             # Dataframe with variables multiindex
             df = variables.get_df()
             var_names = df.index.names
+            var_units = [str(script.get_parameter_unit(v))
+                         for v in var_names]
             var_qty = len(variables)
 
             if var_qty > 1:
@@ -202,6 +205,7 @@ class Simulation:
         else:
             df = pd.DataFrame(index=pd.MultiIndex.from_tuples([(0,)]))
             var_names = []
+            var_units = []
             var_qty = 0
 
         # %% Start
@@ -321,37 +325,55 @@ class Simulation:
         if var_qty > 0:
             fig.savefig(os.path.join(self.result_dir, 'data.png'))
 
+        # %% Save results data organized into folders
         if var_qty > 1:
-            # Split data to columns by first index
+            # Create first column header
+            row_var = df.index.names[-1]
+            col_var = df.index.names[-2]
+            r_var_unit = str(script.get_parameter_unit(row_var))
+            c_var_unit = str(script.get_parameter_unit(col_var))
+            header_0 = [(row_var,
+                         r_var_unit,
+                         f'{col_var} ({c_var_unit}) =')]
+
+            # Split data by result columns
             for col in df.columns:
                 data_name, data_unit = get_name_and_unit_from_str(col)
+                header = header_0 + [(data_name, data_unit, v)
+                                     for v in variables.at(-2).values]
 
-                var = variables.at(0)
-                v = var.name
-                v_unit = str(script.get_parameter_unit(v))
-                values = var.values
+                # Get index values except last 2 levels
+                var_vals = set([x[:-2] for x in df.index.values])
 
-                idx = df.loc[values[0]].index
-                new_df = pd.DataFrame(index=idx, columns=values)
+                # Split data by folders (\<var_name>=<var_value> <var_unit>\)
+                for val in var_vals:
+                    sub_dirs_list = [f'{x[0]}={x[1]:.2f} {x[2]}'
+                                     for x in zip(var_names[:-2],
+                                                  val,
+                                                  var_units[:-2])]
+                    out_dir = os.path.join(self.result_dir,
+                                           sub_dirs[RESULTS], *sub_dirs_list)
+                    if not os.path.exists(out_dir):
+                        os.makedirs(out_dir)
+                    result_file = os.path.join(out_dir,
+                                               f'results_{data_name}.dat')
+                    tmp_df = df[col].loc[val].unstack(df.index.names[-2])
 
-                header = []
-                for p in new_df.index.names:
-                    unit = str(script.get_parameter_unit(p))
-                    header += [(p, unit, '')]
-                h = header[-1]
-                # Add 'var_name (var_unit) = ' str
-                header[-1] = [h[0], h[1], f'{v} ({v_unit}) =']
+                    # Plot
+                    ax = tmp_df.plot.line()
+                    ax.set_ylabel(col)
+                    ax.set_xlabel(f'{var_names[-1]}, {var_units[-1]}')
+                    legend = ax.get_legend()
+                    legend.set_title(f'{var_names[-2]}, {var_units[-2]}')
+                    fig = ax.get_figure()
+                    fig.savefig(os.path.join(out_dir,
+                                             f'results_{data_name}.png'))
 
-                for val in values:
-                    new_df[val] = df.loc[val, col]
-                    header += [(data_name, data_unit, val)]
+                    df_out = tmp_df.reset_index()
+                    df_out.columns = pd.MultiIndex.from_tuples(header)
+                    df_out.to_csv(result_file, sep='\t', index=False)
 
-                result_file = os.path.join(self.result_dir,
-                                           f'results_{data_name}.dat')
-                df_out = new_df.reset_index()
-                df_out.columns = pd.MultiIndex.from_tuples(header)
-                df_out.to_csv(result_file, sep='\t', index=False)
-
+        # %% Save full results data
         # Create header with units:
         header = []
         # for variables
@@ -362,7 +384,6 @@ class Simulation:
         for col in df.columns:
             header += [get_name_and_unit_from_str(col)]
 
-        # %% Save result data
         result_file = os.path.join(self.result_dir, 'results.dat')
         df_out = df.reset_index()
         df_out.columns = pd.MultiIndex.from_tuples(header)
