@@ -250,8 +250,10 @@ class Simulation:
                 plt.style.use('seaborn-whitegrid')
 
             # Move table file to output dir and rename
-            table_copy_file = os.path.join(sub_dirs[TABLES],
-                                           f'table{fvar_str}.txt')
+            out_dir = os.path.join(sub_dirs[TABLES], *v_list[:-1])
+            if not os.path.exists(out_dir):
+                os.makedirs(out_dir)
+            table_copy_file = os.path.join(out_dir, f'table{fvar_str}.txt')
             shutil.move(table_file, table_copy_file)
 
             # %% Convert ovf files
@@ -267,7 +269,9 @@ class Simulation:
                 self.warnings[f'#{iter_num:2} {var_str}'] = warn
 
             # Plot table data
-            self._plot_table(table_df, sub_dirs[PLOTS], title=var_str,
+            self._plot_table(table_df,
+                             os.path.join(sub_dirs[PLOTS], *v_list[:-1]),
+                             title=var_str,
                              fname=fvar_str)
 
             # %% Process table data
@@ -343,7 +347,7 @@ class Simulation:
                     header += [(data_name, data_unit, val)]
 
                 result_file = os.path.join(self.result_dir,
-                                           f'result_{data_name}.dat')
+                                           f'results_{data_name}.dat')
                 df_out = new_df.reset_index()
                 df_out.columns = pd.MultiIndex.from_tuples(header)
                 df_out.to_csv(result_file, sep='\t', index=False)
