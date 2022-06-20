@@ -336,39 +336,41 @@ class Simulation:
                          r_var_unit,
                          f'{col_var} ({c_var_unit}) =')]
 
-            # Split data by result columns
-            for col in df.columns:
-                data_name, data_unit = get_name_and_unit_from_str(col)
-                header = header_0 + [(data_name, data_unit, v)
-                                     for v in variables.at(-2).values]
+            # Get var values except last 2 levels
+            var_vals = set([x[:-2] for x in df.index.values])
 
-                # Get index values except last 2 levels
-                var_vals = set([x[:-2] for x in df.index.values])
+            # Split data by folders (\<var_name>=<var_value> <var_unit>\)
+            for val in var_vals:
+                sub_dirs_list = [f'{x[0]}={x[1]:.2f} {x[2]}'
+                                 for x in zip(var_names[:-2],
+                                              val, var_units[:-2])]
+                out_dir = os.path.join(self.result_dir,
+                                       sub_dirs[RESULTS], *sub_dirs_list)
+                if not os.path.exists(out_dir):
+                    os.makedirs(out_dir)
 
-                # Split data by folders (\<var_name>=<var_value> <var_unit>\)
-                for val in var_vals:
-                    sub_dirs_list = [f'{x[0]}={x[1]:.2f} {x[2]}'
-                                     for x in zip(var_names[:-2],
-                                                  val,
-                                                  var_units[:-2])]
-                    out_dir = os.path.join(self.result_dir,
-                                           sub_dirs[RESULTS], *sub_dirs_list)
-                    if not os.path.exists(out_dir):
-                        os.makedirs(out_dir)
-                    result_file = os.path.join(out_dir,
-                                               f'results_{data_name}.dat')
-                    tmp_df = df[col].loc[val].unstack(df.index.names[-2])
+                fstr = ']_['.join(sub_dirs_list).replace(' ', '')
+                if var_qty > 2:
+                    fstr = '_[' + fstr + ']'
+
+                # Save each result column data
+                for d in df.columns:
+                    data_name, data_unit = get_name_and_unit_from_str(d)
+                    fname = f'results_{data_name}{fstr}'
+                    header = header_0 + [(data_name, data_unit, v)
+                                         for v in variables.at(-2).values]
+                    tmp_df = df[d].loc[val].unstack(df.index.names[-2])
 
                     # Plot
                     ax = tmp_df.plot.line()
-                    ax.set_ylabel(col)
+                    ax.set_ylabel(d)
                     ax.set_xlabel(f'{var_names[-1]}, {var_units[-1]}')
                     legend = ax.get_legend()
                     legend.set_title(f'{var_names[-2]}, {var_units[-2]}')
                     fig = ax.get_figure()
-                    fig.savefig(os.path.join(out_dir,
-                                             f'results_{data_name}.png'))
-
+                    fig.savefig(os.path.join(out_dir, f'{fname}.png'))
+                    # Save to text file
+                    result_file = os.path.join(out_dir, f'{fname}.dat')
                     df_out = tmp_df.reset_index()
                     df_out.columns = pd.MultiIndex.from_tuples(header)
                     df_out.to_csv(result_file, sep='\t', index=False)
