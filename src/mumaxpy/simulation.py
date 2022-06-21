@@ -208,10 +208,10 @@ class Simulation:
             var_qty = len(variables)
 
             for v in variables.get():
-                var_vals_str += f'_[{v.name}={min(v.values)}'
+                var_vals_str += '_{' + f'{v.name}={min(v.values):g}'
                 if len(v.values) > 1:
-                    var_vals_str += f'-{max(v.values)}'
-                var_vals_str += str(script.get_parameter_unit(v.name)) + ']'
+                    var_vals_str += f'-{max(v.values):g}'
+                var_vals_str += str(script.get_parameter_unit(v.name)) + '}'
 
             if var_qty > 1:
                 # Create dict for colormapping
@@ -240,7 +240,7 @@ class Simulation:
                 v_list += [script.get_parameter_str(v)]
             var_str = ', '.join(v_list)
             if len(v_list) > 0:
-                fvar_str = '_[' + ']_['.join(v_list).replace(' ', '') + ']'
+                fvar_str = '_{' + '}_{'.join(v_list).replace(' ', '') + '}'
             else:
                 fvar_str = ''
 
@@ -368,9 +368,9 @@ class Simulation:
                 if not os.path.exists(out_dir):
                     os.makedirs(out_dir)
 
-                fstr = ']_['.join(sub_dirs_list).replace(' ', '')
+                fstr = '}_{'.join(sub_dirs_list).replace(' ', '')
                 if var_qty > 2:
-                    fstr = '_[' + fstr + ']'
+                    fstr = '_{' + fstr + '}'
 
                 # Save each result column data
                 for d in df.columns:
