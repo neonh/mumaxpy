@@ -115,12 +115,17 @@ class Simulation:
             fig.tight_layout()
             fig.savefig(os.path.join(output_dir, f'results_{name}.png'))
 
-    def _create_result_dir(self, script_name, start_time, comment=''):
+    def _create_result_dir(self, script_name, start_time,
+                           var_str='', comment=''):
         # Create directory for results
-        date_str = datetime.strftime(start_time, '%Y%m%d_%H%M')
-        sub_dir = "_".join([date_str, remove_forbidden_chars(comment)])
+        sub_dir_name = datetime.strftime(start_time, '%Y%m%d_%H%M')
+        if var_str != '':
+            sub_dir_name += var_str
+        if comment != '':
+            sub_dir_name += f'_{comment}'
         result_dir = os.path.join(self.data_dir,
-                                  script_name, sub_dir)
+                                  script_name,
+                                  remove_forbidden_chars(sub_dir_name))
         if not os.path.exists(result_dir):
             os.makedirs(result_dir)
         return result_dir
@@ -193,6 +198,7 @@ class Simulation:
         script_file = os.path.join(self.work_dir, f'{script.name}.mx3')
         table_file = os.path.join(output_dir, 'table.txt')
 
+        var_vals_str = ''
         if variables is not None:
             # Dataframe with variables multiindex
             df = variables.get_df()
@@ -200,6 +206,12 @@ class Simulation:
             var_units = [str(script.get_parameter_unit(v))
                          for v in var_names]
             var_qty = len(variables)
+
+            for v in variables.get():
+                var_vals_str += f'_[{v.name}={min(v.values)}'
+                if len(v.values) > 1:
+                    var_vals_str += f'-{max(v.values)}'
+                var_vals_str += str(script.get_parameter_unit(v.name)) + ']'
 
             if var_qty > 1:
                 # Create dict for colormapping
@@ -249,7 +261,9 @@ class Simulation:
 
             if iter_num == 1:
                 self.result_dir = self._create_result_dir(script.name,
-                                                          start_time, comment)
+                                                          start_time,
+                                                          var_vals_str,
+                                                          comment)
                 sub_dirs = self._create_sub_dirs(self.result_dir)
                 # Copy script to results and rename
                 shutil.copy2(script_file, os.path.join(sub_dirs[SCRIPTS],
