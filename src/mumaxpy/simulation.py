@@ -287,30 +287,29 @@ class Simulation:
                 res_dict = self.process_func(table_df, table_units,
                                              script.parameters)
 
-                if var_qty > 0:
-                    if iter_num == 1:
-                        # Create plot
-                        fig, axs = plt.subplots(len(res_dict))
-                        # In case of only one ax:
-                        if not hasattr(axs, '__iter__'):
-                            axs = [axs]
-                        for i, key in enumerate(res_dict):
-                            # Set title and lables
-                            axs[i].set_ylabel(key)
-                        x_str = script.get_parameter_name_str(var_names[-1])
-                        axs[-1].set_xlabel(x_str)
+                if iter_num == 1:
+                    # Create plot for current data
+                    fig, axs = plt.subplots(len(res_dict))
+                    # In case of only one ax:
+                    if not hasattr(axs, '__iter__'):
+                        axs = [axs]
+                    for i, key in enumerate(res_dict):
+                        # Set title and lables
+                        axs[i].set_ylabel(key)
+                    x_str = script.get_parameter_name_str(var_names[-1])
+                    axs[-1].set_xlabel(x_str)
 
-                    for i, (key, val) in enumerate(res_dict.items()):
-                        df.loc[var_value, key] = val
-                        # Plot
-                        if var_qty > 1:
-                            color = plt.cm.brg(color_dict[var_value[-2]])
-                        else:
-                            color = 'blue'
-                        axs[i].scatter(var_value[-1], val,
-                                       c=[color], alpha=0.8)
-                        plt.pause(0.05)
-                        plt.show(block=False)
+                for i, (key, val) in enumerate(res_dict.items()):
+                    df.loc[var_value, key] = val
+                    # Plot
+                    if var_qty > 1:
+                        color = plt.cm.brg(color_dict[var_value[-2]])
+                    else:
+                        color = 'blue'
+                    axs[i].scatter(var_value[-1], val,
+                                   c=[color], alpha=0.8)
+                    plt.pause(0.05)
+                    plt.show(block=False)
 
             prev_time = time
             iter_num += 1
@@ -328,9 +327,9 @@ class Simulation:
         # %% Plot and save all graphs
         if var_qty > 0:
             self._plot_results(df, sub_dirs[RESULTS])
-
-            fig.tight_layout()
-            fig.savefig(os.path.join(self.result_dir, 'data.png'))
+        # Save current data plot
+        fig.tight_layout()
+        fig.savefig(os.path.join(self.result_dir, 'data.png'))
 
         # %% Save results data organized into folders
         if var_qty > 1:
