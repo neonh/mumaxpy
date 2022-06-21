@@ -29,8 +29,8 @@ RESULTS = 'results'
 PLOTS = 'plots'
 SCRIPTS = 'scripts'
 MAT_FILES = 'mat_files'
-SUB_DIRS = [TABLES, SCRIPTS]
-OPT_SUB_DIRS = [RESULTS, PLOTS, MAT_FILES]
+SUB_DIRS = [TABLES, SCRIPTS, RESULTS]
+OPT_SUB_DIRS = [PLOTS, MAT_FILES]
 
 MAX_ANGLE = 'MaxAngle'
 
@@ -327,7 +327,7 @@ class Simulation:
         # After all of iterations #
         # %% Plot and save all graphs
         if var_qty > 0:
-            self._plot_results(df, self.result_dir)
+            self._plot_results(df, sub_dirs[RESULTS])
 
             fig.tight_layout()
             fig.savefig(os.path.join(self.result_dir, 'data.png'))
@@ -351,8 +351,7 @@ class Simulation:
                 sub_dirs_list = [f'{x[0]}={x[1]:.2f} {x[2]}'
                                  for x in zip(var_names[:-2],
                                               val, var_units[:-2])]
-                out_dir = os.path.join(self.result_dir,
-                                       sub_dirs[RESULTS], *sub_dirs_list)
+                out_dir = os.path.join(sub_dirs[RESULTS], *sub_dirs_list)
                 if not os.path.exists(out_dir):
                     os.makedirs(out_dir)
 
@@ -395,7 +394,7 @@ class Simulation:
         for col in df.columns:
             header += [get_name_and_unit_from_str(col)]
 
-        result_file = os.path.join(self.result_dir, 'results.dat')
+        result_file = os.path.join(sub_dirs[RESULTS], 'results.dat')
         df_out = df.reset_index()
         df_out.columns = pd.MultiIndex.from_tuples(header)
         df_out.to_csv(result_file, sep='\t', index=False)
