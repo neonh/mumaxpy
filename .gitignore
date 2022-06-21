@@ -1,3 +1,6 @@
+# Version file
+src/mumaxpy/_version.py
+
 # Mumax3 output folders
 examples/output/
 

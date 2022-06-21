@@ -128,14 +128,18 @@ def convert(file_list, component=ALL):
 
     data = np.stack(data_arr_list, axis=0)
 
-    if component != ALL:
-        data_dict['quantity']['name'] += f'_{component}'
-        data_dict['quantity']['dimension'] = 1
-        # Get slice for this vector component
-        data = data[:, XYZ[component], :, :, :]
+    if data_dict['quantity']['dimension'] > 1:
+        if component != ALL:
+            data_dict['quantity']['name'] += f'_{component}'
+            data_dict['quantity']['dimension'] = 1
+            # Get slice for this vector component
+            data = data[:, XYZ[component], :, :, :]
+        else:
+            # Move dimension-axis to the end
+            data = np.moveaxis(data, 1, -1)
     else:
-        # Move dimension-axis to the end
-        data = np.moveaxis(data, 1, -1)
+        # Remove dimension-axis
+        data = data[:, 0, :, :, :]
 
     data_dict['time']['values'] = time_values
     data_dict['data'] = data

@@ -12,6 +12,10 @@ from .ovf import ovf_to_mat
 from .utilities import get_name_and_unit_from_str, remove_forbidden_chars
 
 
+# %% Config
+plt.rcParams['figure.figsize'] = (10, 8)
+
+
 # %% Constants
 PRE = 0
 POST = 1
@@ -21,10 +25,11 @@ X, Y, Z, ALL = 'x', 'y', 'z', ''
 XYZ = [X, Y, Z]
 
 TABLES = 'tables'
+RESULTS = 'results'
 PLOTS = 'plots'
 SCRIPTS = 'scripts'
 MAT_FILES = 'mat_files'
-SUB_DIRS = [TABLES, SCRIPTS]
+SUB_DIRS = [TABLES, SCRIPTS, RESULTS]
 OPT_SUB_DIRS = [PLOTS, MAT_FILES]
 
 MAX_ANGLE = 'MaxAngle'
@@ -85,37 +90,42 @@ class Simulation:
             os.makedirs(output_dir)
         for cols in self.table_columns_to_plot:
             name = '_'.join(cols)
-            ax = df[cols].plot.line()
+            fig, ax = plt.subplots()
+            df[cols].plot.line(ax=ax)
             ax.set_title(title)
-            fig = ax.get_figure()
+            fig.tight_layout()
             fig.savefig(os.path.join(output_dir,
                                      f'{name}{fname}.png'))
             plt.close(fig)
 
     def _plot_results(self, df, output_dir):
-        var_names = df.index.names
-        if len(var_names) > 1:
-            # Plot graph
-            ax = df.unstack(level=0).plot.line()
+        if len(df.index.names) > 1:
+            # Unstack multiindex to columns
+            lvls_to_unstack = list(range(len(df.index.names) - 1))
+            tmp_df = df.unstack(lvls_to_unstack)
         else:
-            ax = df.plot.line()
-        fig = ax.get_figure()
-        fig.savefig(os.path.join(output_dir, 'results.png'))
+            tmp_df = df
+            tmp_df.index = df.index.get_level_values(0)
 
-        if len(var_names) > 1:
-            for col in df.columns:
-                name, _ = get_name_and_unit_from_str(col)
-                ax = df[col].unstack(level=0).plot.line()
-                ax.set_ylabel(col)
-                fig = ax.get_figure()
-                fig.savefig(os.path.join(output_dir, f'results_{name}.png'))
+        for col in df.columns:
+            fig, ax = plt.subplots()
+            name, _ = get_name_and_unit_from_str(col)
+            tmp_df[col].plot.line(ax=ax)
+            ax.set_ylabel(col)
+            fig.tight_layout()
+            fig.savefig(os.path.join(output_dir, f'results_{name}.png'))
 
-    def _create_result_dir(self, script_name, start_time, comment=''):
+    def _create_result_dir(self, script_name, start_time,
+                           var_str='', comment=''):
         # Create directory for results
-        date_str = datetime.strftime(start_time, '%Y%m%d_%H%M')
-        sub_dir = "_".join([date_str, remove_forbidden_chars(comment)])
+        sub_dir_name = datetime.strftime(start_time, '%Y%m%d_%H%M')
+        if var_str != '':
+            sub_dir_name += var_str
+        if comment != '':
+            sub_dir_name += f'_{comment}'
         result_dir = os.path.join(self.data_dir,
-                                  script_name, sub_dir)
+                                  script_name,
+                                  remove_forbidden_chars(sub_dir_name))
         if not os.path.exists(result_dir):
             os.makedirs(result_dir)
         return result_dir
@@ -188,11 +198,20 @@ class Simulation:
         script_file = os.path.join(self.work_dir, f'{script.name}.mx3')
         table_file = os.path.join(output_dir, 'table.txt')
 
+        var_vals_str = ''
         if variables is not None:
             # Dataframe with variables multiindex
             df = variables.get_df()
             var_names = df.index.names
+            var_units = [str(script.get_parameter_unit(v))
+                         for v in var_names]
             var_qty = len(variables)
+
+            for v in variables.get():
+                var_vals_str += '_{' + f'{v.name}={min(v.values):g}'
+                if len(v.values) > 1:
+                    var_vals_str += f'-{max(v.values):g}'
+                var_vals_str += str(script.get_parameter_unit(v.name)) + '}'
 
             if var_qty > 1:
                 # Create dict for colormapping
@@ -202,6 +221,7 @@ class Simulation:
         else:
             df = pd.DataFrame(index=pd.MultiIndex.from_tuples([(0,)]))
             var_names = []
+            var_units = []
             var_qty = 0
 
         # %% Start
@@ -220,7 +240,7 @@ class Simulation:
                 v_list += [script.get_parameter_str(v)]
             var_str = ', '.join(v_list)
             if len(v_list) > 0:
-                fvar_str = '_[' + ']_['.join(v_list).replace(' ', '') + ']'
+                fvar_str = '_{' + '}_{'.join(v_list).replace(' ', '') + '}'
             else:
                 fvar_str = ''
 
@@ -241,7 +261,9 @@ class Simulation:
 
             if iter_num == 1:
                 self.result_dir = self._create_result_dir(script.name,
-                                                          start_time, comment)
+                                                          start_time,
+                                                          var_vals_str,
+                                                          comment)
                 sub_dirs = self._create_sub_dirs(self.result_dir)
                 # Copy script to results and rename
                 shutil.copy2(script_file, os.path.join(sub_dirs[SCRIPTS],
@@ -250,8 +272,10 @@ class Simulation:
                 plt.style.use('seaborn-whitegrid')
 
             # Move table file to output dir and rename
-            table_copy_file = os.path.join(sub_dirs[TABLES],
-                                           f'table{fvar_str}.txt')
+            out_dir = os.path.join(sub_dirs[TABLES], *v_list[:-1])
+            if not os.path.exists(out_dir):
+                os.makedirs(out_dir)
+            table_copy_file = os.path.join(out_dir, f'table{fvar_str}.txt')
             shutil.move(table_file, table_copy_file)
 
             # %% Convert ovf files
@@ -267,7 +291,9 @@ class Simulation:
                 self.warnings[f'#{iter_num:2} {var_str}'] = warn
 
             # Plot table data
-            self._plot_table(table_df, sub_dirs[PLOTS], title=var_str,
+            self._plot_table(table_df,
+                             os.path.join(sub_dirs[PLOTS], *v_list[:-1]),
+                             title=var_str,
                              fname=fvar_str)
 
             # %% Process table data
@@ -275,30 +301,29 @@ class Simulation:
                 res_dict = self.process_func(table_df, table_units,
                                              script.parameters)
 
-                if var_qty > 0:
-                    if iter_num == 1:
-                        # Create plot
-                        fig, axs = plt.subplots(len(res_dict))
-                        # In case of only one ax:
-                        if not hasattr(axs, '__iter__'):
-                            axs = [axs]
-                        for i, key in enumerate(res_dict):
-                            # Set title and lables
-                            axs[i].set_ylabel(key)
-                        x_str = script.get_parameter_name_str(var_names[-1])
-                        axs[-1].set_xlabel(x_str)
+                if iter_num == 1:
+                    # Create plot for current data
+                    fig, axs = plt.subplots(len(res_dict))
+                    # In case of only one ax:
+                    if not hasattr(axs, '__iter__'):
+                        axs = [axs]
+                    for i, key in enumerate(res_dict):
+                        # Set title and lables
+                        axs[i].set_ylabel(key)
+                    x_str = script.get_parameter_name_str(var_names[-1])
+                    axs[-1].set_xlabel(x_str)
 
-                    for i, (key, val) in enumerate(res_dict.items()):
-                        df.loc[var_value, key] = val
-                        # Plot
-                        if var_qty > 1:
-                            color = plt.cm.brg(color_dict[var_value[-2]])
-                        else:
-                            color = 'blue'
-                        axs[i].scatter(var_value[-1], val,
-                                       c=[color], alpha=0.8)
-                        plt.pause(0.05)
-                        plt.show(block=False)
+                for i, (key, val) in enumerate(res_dict.items()):
+                    df.loc[var_value, key] = val
+                    # Plot
+                    if var_qty > 1:
+                        color = plt.cm.brg(color_dict[var_value[-2]])
+                    else:
+                        color = 'blue'
+                    axs[i].scatter(var_value[-1], val,
+                                   c=[color], alpha=0.8)
+                    plt.pause(0.05)
+                    plt.show(block=False)
 
             prev_time = time
             iter_num += 1
@@ -313,41 +338,65 @@ class Simulation:
             print('')
 
         # After all of iterations #
-        # %% Save figure
+        # %% Plot and save all graphs
         if var_qty > 0:
-            fig.savefig(os.path.join(self.result_dir, 'data.png'))
+            self._plot_results(df, sub_dirs[RESULTS])
+        # Save current data plot
+        fig.tight_layout()
+        fig.savefig(os.path.join(self.result_dir, 'data.png'))
 
+        # %% Save results data organized into folders
         if var_qty > 1:
-            # Split data to columns by first index
-            for col in df.columns:
-                data_name, data_unit = get_name_and_unit_from_str(col)
+            # Create first column header
+            row_var = df.index.names[-1]
+            col_var = df.index.names[-2]
+            r_var_unit = str(script.get_parameter_unit(row_var))
+            c_var_unit = str(script.get_parameter_unit(col_var))
+            header_0 = [(row_var,
+                         r_var_unit,
+                         f'{col_var} ({c_var_unit}) =')]
 
-                var = variables.at(0)
-                v = var.name
-                v_unit = str(script.get_parameter_unit(v))
-                values = var.values
+            # Get var values except last 2 levels
+            var_vals = set([x[:-2] for x in df.index.values])
 
-                idx = df.loc[values[0]].index
-                new_df = pd.DataFrame(index=idx, columns=values)
+            # Split data by folders (\<var_name>=<var_value> <var_unit>\)
+            for val in var_vals:
+                sub_dirs_list = [f'{x[0]}={x[1]:.2f} {x[2]}'
+                                 for x in zip(var_names[:-2],
+                                              val, var_units[:-2])]
+                out_dir = os.path.join(sub_dirs[RESULTS], *sub_dirs_list)
+                if not os.path.exists(out_dir):
+                    os.makedirs(out_dir)
 
-                header = []
-                for p in new_df.index.names:
-                    unit = str(script.get_parameter_unit(p))
-                    header += [(p, unit, '')]
-                h = header[-1]
-                # Add 'var_name (var_unit) = ' str
-                header[-1] = [h[0], h[1], f'{v} ({v_unit}) =']
+                fstr = '}_{'.join(sub_dirs_list).replace(' ', '')
+                if var_qty > 2:
+                    fstr = '_{' + fstr + '}'
 
-                for val in values:
-                    new_df[val] = df.loc[val, col]
-                    header += [(data_name, data_unit, val)]
+                # Save each result column data
+                for d in df.columns:
+                    data_name, data_unit = get_name_and_unit_from_str(d)
+                    fname = f'results_{data_name}{fstr}'
+                    header = header_0 + [(data_name, data_unit, v)
+                                         for v in variables.at(-2).values]
+                    tmp_df = df[d].loc[val].unstack(df.index.names[-2])
 
-                result_file = os.path.join(self.result_dir,
-                                           f'result_{data_name}.dat')
-                df_out = new_df.reset_index()
-                df_out.columns = pd.MultiIndex.from_tuples(header)
-                df_out.to_csv(result_file, sep='\t', index=False)
+                    # Plot
+                    fig, ax = plt.subplots()
+                    tmp_df.plot.line(ax=ax)
+                    ax.set_ylabel(d)
+                    ax.set_xlabel(f'{var_names[-1]}, {var_units[-1]}')
+                    legend = ax.get_legend()
+                    legend.set_title(f'{var_names[-2]}, {var_units[-2]}')
+                    fig.tight_layout()
+                    fig.savefig(os.path.join(out_dir, f'{fname}.png'))
+                    plt.close(fig)
+                    # Save to text file
+                    result_file = os.path.join(out_dir, f'{fname}.dat')
+                    df_out = tmp_df.reset_index()
+                    df_out.columns = pd.MultiIndex.from_tuples(header)
+                    df_out.to_csv(result_file, sep='\t', index=False)
 
+        # %% Save full results data
         # Create header with units:
         header = []
         # for variables
@@ -358,8 +407,7 @@ class Simulation:
         for col in df.columns:
             header += [get_name_and_unit_from_str(col)]
 
-        # %% Save result data
-        result_file = os.path.join(self.result_dir, 'results.dat')
+        result_file = os.path.join(sub_dirs[RESULTS], 'results.dat')
         df_out = df.reset_index()
         df_out.columns = pd.MultiIndex.from_tuples(header)
         df_out.to_csv(result_file, sep='\t', index=False)
@@ -368,10 +416,6 @@ class Simulation:
         print(f'<<<< Finished at {finish_time}')
         print(f'Elapsed time: {finish_time - start_time}')
         print('Results at', self.result_dir)
-
-        # %% Plot and save all graphs
-        if var_qty > 0:
-            self._plot_results(df, self.result_dir)
 
         self.df = df
         return self.result_dir
