@@ -12,6 +12,10 @@ from .ovf import ovf_to_mat
 from .utilities import get_name_and_unit_from_str, remove_forbidden_chars
 
 
+# %% Config
+plt.rcParams['figure.figsize'] = (10, 8)
+
+
 # %% Constants
 PRE = 0
 POST = 1
@@ -86,30 +90,30 @@ class Simulation:
             os.makedirs(output_dir)
         for cols in self.table_columns_to_plot:
             name = '_'.join(cols)
-            ax = df[cols].plot.line()
+            fig, ax = plt.subplots()
+            df[cols].plot.line(ax=ax)
             ax.set_title(title)
-            fig = ax.get_figure()
+            fig.tight_layout()
             fig.savefig(os.path.join(output_dir,
                                      f'{name}{fname}.png'))
             plt.close(fig)
 
     def _plot_results(self, df, output_dir):
-        var_names = df.index.names
-        if len(var_names) > 1:
-            # Plot graph
-            ax = df.unstack(level=0).plot.line()
+        if len(df.index.names) > 1:
+            # Unstack multiindex to columns
+            lvls_to_unstack = list(range(len(df.index.names) - 1))
+            tmp_df = df.unstack(lvls_to_unstack)
         else:
-            ax = df.plot.line()
-        fig = ax.get_figure()
-        fig.savefig(os.path.join(output_dir, 'results.png'))
+            tmp_df = df
+            tmp_df.index = df.index.get_level_values(0)
 
-        if len(var_names) > 1:
-            for col in df.columns:
-                name, _ = get_name_and_unit_from_str(col)
-                ax = df[col].unstack(level=0).plot.line()
-                ax.set_ylabel(col)
-                fig = ax.get_figure()
-                fig.savefig(os.path.join(output_dir, f'results_{name}.png'))
+        for col in df.columns:
+            fig, ax = plt.subplots()
+            name, _ = get_name_and_unit_from_str(col)
+            tmp_df[col].plot.line(ax=ax)
+            ax.set_ylabel(col)
+            fig.tight_layout()
+            fig.savefig(os.path.join(output_dir, f'results_{name}.png'))
 
     def _create_result_dir(self, script_name, start_time, comment=''):
         # Create directory for results
@@ -321,8 +325,11 @@ class Simulation:
             print('')
 
         # After all of iterations #
-        # %% Save figure
+        # %% Plot and save all graphs
         if var_qty > 0:
+            self._plot_results(df, self.result_dir)
+
+            fig.tight_layout()
             fig.savefig(os.path.join(self.result_dir, 'data.png'))
 
         # %% Save results data organized into folders
@@ -362,13 +369,15 @@ class Simulation:
                     tmp_df = df[d].loc[val].unstack(df.index.names[-2])
 
                     # Plot
-                    ax = tmp_df.plot.line()
+                    fig, ax = plt.subplots()
+                    tmp_df.plot.line(ax=ax)
                     ax.set_ylabel(d)
                     ax.set_xlabel(f'{var_names[-1]}, {var_units[-1]}')
                     legend = ax.get_legend()
                     legend.set_title(f'{var_names[-2]}, {var_units[-2]}')
-                    fig = ax.get_figure()
+                    fig.tight_layout()
                     fig.savefig(os.path.join(out_dir, f'{fname}.png'))
+                    plt.close(fig)
                     # Save to text file
                     result_file = os.path.join(out_dir, f'{fname}.dat')
                     df_out = tmp_df.reset_index()
@@ -395,10 +404,6 @@ class Simulation:
         print(f'<<<< Finished at {finish_time}')
         print(f'Elapsed time: {finish_time - start_time}')
         print('Results at', self.result_dir)
-
-        # %% Plot and save all graphs
-        if var_qty > 0:
-            self._plot_results(df, self.result_dir)
 
         self.df = df
         return self.result_dir
