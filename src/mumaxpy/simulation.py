@@ -2,6 +2,7 @@
 Simulation class
 """
 import os
+import re
 from datetime import datetime
 import matplotlib.pyplot as plt
 import shutil
@@ -144,15 +145,27 @@ class Simulation:
             sub_dirs_dict.update({name: sub_dir})
         return sub_dirs_dict
 
-    def _run_mumax(self, script_file, script):
+    def _run_mx3_script(self, script_file, script):
         with open(script_file, 'w') as f:
-            f.write(script)
+            f.write(script.text())
 
         # Run
         command = ['mumax3', '-cache', self.cache_dir, script_file]
         ret = subprocess.run(command, capture_output=True, text=True)
         if ret.returncode != 0:
-            raise RuntimeError(f'Mumax returned an error:\n{ret.stderr}')
+            out_str = f'Mumax returned an error:\n{ret.stderr}'
+
+            m = re.search('script line (\d+):', ret.stderr)
+            if m is not None:
+                err_line = int(m.group(1))
+                out_str += ('\n---' +
+                            f'\nCheck line {err_line} '
+                            f'in generated file {script_file}')
+
+                tmpl_err_line = err_line - script.get_parameter_lines_qty() - 1
+                if tmpl_err_line > 0:
+                    out_str += f'\nor line {tmpl_err_line} in template file'
+            raise RuntimeError(out_str)
 
     def set_max_angle(self, max_angle=None):
         self.max_angle = max_angle
@@ -250,7 +263,7 @@ class Simulation:
 
             # Run
             print(f'#{iter_num:2} of {iter_qty} | {var_str}')
-            self._run_mumax(script_file, script.text())
+            self._run_mx3_script(script_file, script)
 
             time = datetime.now()
             duration_str = str(time - prev_time).split('.')[0]
