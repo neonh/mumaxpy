@@ -4,14 +4,21 @@ Processing OVF files
 import glob
 import numpy as np
 import os
+import re
 import struct
 from scipy.io import savemat
+from .utilities import get_filename
+from typing import List, Dict, Tuple, Optional
+
+
+# %% Types
+Path = str
 
 
 # %% Constants
 OVF_VER = 'OOMMF OVF 2.0'
 
-X, Y, Z, ALL = 'x', 'y', 'z', ''
+X, Y, Z = 'x', 'y', 'z'
 XYZ = {X: 0, Y: 1, Z: 2}
 
 MIN_DESC = [f'{x}min' for x in XYZ]
@@ -22,7 +29,7 @@ STEP_DESC = [f'{x}stepsize' for x in XYZ]
 
 
 # %% Functions
-def read_header(f):
+def read_header(f: Path) -> Tuple[Dict, int]:
     version_str = next(f).decode('utf-8').strip()[2:]
     if version_str != OVF_VER:
         print(f'WARNING! Version of .ovf files is not {OVF_VER}')
@@ -56,7 +63,7 @@ def read_header(f):
     return header, dtype_sz
 
 
-def read(file):
+def read(file: Path) -> Tuple[str, Dict, Dict, Dict, np.ndarray]:
     with open(file, 'rb') as f:
         header, dtype_sz = read_header(f)
 
@@ -77,11 +84,15 @@ def read(file):
         if val != check_value:
             raise ValueError('OVF: Wrong byte order')
 
+        if header['meshtype'] != 'rectangular':
+            raise ValueError('OVF: Only rectangular mesh is supported')
+
         bytes_data = f.read(bytes_qty)
 
         shape = [dim] + nodes
         data = np.frombuffer(bytes_data, dtype=dtype).reshape(shape, order='F')
 
+        title = header['Title']
         # Grid
         grid_size = [float(header[s[1]]) - float(header[s[0]])
                      for s in zip(MIN_DESC, MAX_DESC)]
@@ -97,29 +108,30 @@ def read(file):
                 'unit': time_tuple[-1]}
 
         # Data
-        q_unit = header['valueunits'].split(' ')[0]
-        quantity = {'name': header['Title'],
-                    'unit': q_unit,
-                    'dimension': dim,
+        quantity = {'dimension': dim,
+                    'labels': header['valuelabels'].split(' '),
+                    'units': header['valueunits'].split(' '),
                     }
-        return time, grid, quantity, data
+        return title, time, grid, quantity, data
 
 
-def convert(file_list, component=ALL):
+def convert(file_list: List[Path]) -> Dict:
     time_values = []
     data_arr_list = []
     data_dict = {}
     for i, file in enumerate(file_list):
-        time, grid, quantity, data_arr = read(file)
+        title, time, grid, quantity, data_arr = read(file)
         time_values += time['values']
         data_arr_list += [data_arr]
         if i == 0:
-            data_dict = {'time': time,
+            data_dict = {'title': title,
+                         'time': time,
                          'grid': grid,
                          'quantity': quantity}
         else:
             # Check header data
-            if ((grid != data_dict['grid'])
+            if ((title != data_dict['title'])
+                    or (grid != data_dict['grid'])
                     or (quantity != data_dict['quantity'])):
                 fname = os.path.basename(file)
                 print(f'WARNING! {fname} file header differ from first one.'
@@ -127,19 +139,8 @@ def convert(file_list, component=ALL):
                 break
 
     data = np.stack(data_arr_list, axis=0)
-
-    if data_dict['quantity']['dimension'] > 1:
-        if component != ALL:
-            data_dict['quantity']['name'] += f'_{component}'
-            data_dict['quantity']['dimension'] = 1
-            # Get slice for this vector component
-            data = data[:, XYZ[component], :, :, :]
-        else:
-            # Move dimension-axis to the end
-            data = np.moveaxis(data, 1, -1)
-    else:
-        # Remove dimension-axis
-        data = data[:, 0, :, :, :]
+    # Move dimension-axis to the end
+    data = np.moveaxis(data, 1, -1)
 
     data_dict['time']['values'] = time_values
     data_dict['data'] = data
@@ -147,16 +148,24 @@ def convert(file_list, component=ALL):
     return data_dict
 
 
-def ovf_to_mat(input_dir,
-               quantity_name,
-               component=ALL,
-               output_dir=None,
-               filename=None,
-               extra_data=None):
-    ovf_files = glob.glob(os.path.join(input_dir, f'{quantity_name}*.ovf'))
+def ovf_to_mat(input_dir: Path,
+               output_dir: Optional[Path] = None,
+               filename_suffix: str = '',
+               extra_data: Optional[Dict] = None) -> List[Path]:
+    ovf_files = glob.glob(os.path.join(input_dir, '*.ovf'))
+    mat_files = []
 
-    if len(ovf_files) > 0:
-        out_dict = convert(ovf_files, component=component)
+    q_dict = {}
+    for f in ovf_files:
+        # Get quantity name (filename except digits at the end)
+        match = re.match(r'(.*?)\d+$', get_filename(f))
+        if match:
+            q_name = match.group(1)
+            f_list = q_dict.get(q_name, [])
+            q_dict[q_name] = f_list + [f]
+
+    for q_name, f_list in q_dict.items():
+        out_dict = convert(sorted(f_list))
         if extra_data is not None:
             out_dict['extra'] = extra_data
 
@@ -166,12 +175,9 @@ def ovf_to_mat(input_dir,
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)
 
-        if filename is None:
-            filename = f'{quantity_name}{component}.mat'
-        mat_file = os.path.join(output_dir, f'{filename}.mat')
+        mat_file = os.path.join(output_dir, f'{q_name}{filename_suffix}.mat')
+        mat_files += [mat_file]
 
         savemat(mat_file, out_dict, do_compression=False)
-    else:
-        mat_file = None
 
-    return mat_file
+    return mat_files

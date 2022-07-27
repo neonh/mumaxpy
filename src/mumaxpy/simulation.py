@@ -52,7 +52,6 @@ class Simulation:
             self.data_dir = self.work_dir
 
         self.df = None
-        self.data_to_save = []
         self.table_columns_to_plot = []
 
         self.max_angle = None
@@ -155,7 +154,7 @@ class Simulation:
         if ret.returncode != 0:
             out_str = f'Mumax returned an error:\n{ret.stderr}'
 
-            m = re.search('script line (\d+):', ret.stderr)
+            m = re.search(r'script line (\d+):', ret.stderr)
             if m is not None:
                 err_line = int(m.group(1))
                 out_str += ('\n---' +
@@ -178,9 +177,6 @@ class Simulation:
 
     def add_table_plot(self, columns):
         self.table_columns_to_plot += [columns]
-
-    def add_data_to_save(self, data, comp=ALL):
-        self.data_to_save += [(data, comp.lower())]
 
     def get_result_dir(self):
         return self.result_dir
@@ -292,10 +288,9 @@ class Simulation:
             shutil.move(table_file, table_copy_file)
 
             # %% Convert ovf files
-            for data, comp in self.data_to_save:
-                ovf_to_mat(output_dir, data, comp,
-                           output_dir=sub_dirs[MAT_FILES],
-                           filename=f'{data}{comp}{fvar_str}')
+            ovf_to_mat(output_dir,
+                       output_dir=sub_dirs[MAT_FILES],
+                       filename_suffix=fvar_str)
 
             # %% Get table data
             table_df, table_units = self._get_table_data(table_copy_file)
