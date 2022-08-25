@@ -185,7 +185,6 @@ def add_output(sim: Simulation, p: Parameters):
     Configure output data and plots saving.
     For example:
         sim.add_table_plot(columns=['MaxAngle'])
-        sim.add_data_to_save(data='m', comp='z')
 
     Parameters
     ----------
@@ -199,10 +198,6 @@ def add_output(sim: Simulation, p: Parameters):
     # Table plots
     sim.add_table_plot(columns=['m.region1x', 'm.region1y'])
     sim.add_table_plot(columns=['MaxAngle'])
-
-    # OVF data
-    if p.saveOVF:
-        sim.add_data_to_save(data='m', comp='x')
 
     return None
 
@@ -228,24 +223,35 @@ def post_processing(result_dir: str, p: Parameters):
         circle = plt.Circle((0, 0), d/2, color='black', fill=False)
         ax.add_patch(circle)
 
-    # Load all .mat files in result_dir and subdirs
-    mat_files = glob.glob(os.path.join(result_dir, "**", "*.mat"),
+    # Mat-files pattern
+    file_pattern = '*.mat'
+    # Find files in result_dir and subdirs
+    mat_files = glob.glob(os.path.join(result_dir, '**', file_pattern),
                           recursive=True)
 
     for i, f in enumerate(mat_files):
         folder = os.path.dirname(f)
         fname = os.path.splitext(os.path.basename(f))[0]
-        print(f'#{i} of {len(mat_files)}: {fname}')
+        print(f'#{i+1} of {len(mat_files)}: {fname}')
 
-        m = MatFileData(f)
-        m.convert_units('ns', 'um')
-        m.plot_amplitude(normal='z', add_plot_func=add_disk_plot,
-                         save_path=folder)
-
-        m.create_animation(normal='z', add_plot_func=add_disk_plot,
-                           save_path=folder, extension='mp4')
-        m.delete()
+        # Close previous plots
         plt.close('all')
+
+        # Load mat-file data
+        m = MatFileData.load(f)
+        # Get x-component of vector
+        mx = m.get_component('x')
+        mx.convert_units('ns', 'um')
+        # Plot amplitude and save plot as picture
+        mx.plot_amplitude(normal='z',
+                          add_plot_func=add_disk_plot,
+                          save_path=folder)
+        # Create interactive plot and save as mp4-video
+        mx.create_animation(normal='z',
+                            add_plot_func=add_disk_plot,
+                            save_path=folder, extension='mp4')
+        # Delete mat-file to save space
+        m.delete()
 
     return None
 
