@@ -1,10 +1,9 @@
 """
 Process data from .mat file
 """
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
 import numpy as np
 import os
+import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
 from scipy.io import loadmat, savemat
 from astropy import units as u
@@ -12,6 +11,7 @@ from dataclasses import dataclass
 from typing import List, Tuple, Dict, Callable, Optional
 from .utilities import extract_parameters, get_filename
 from .signal import Signal
+from .plot import plot_2D, animate_2D
 
 
 # %% Types
@@ -29,6 +29,8 @@ COMP = 'component'
 XYZ = {X: IX, Y: IY, Z: IZ}
 AX_NUM = {T: 0, X: 1, Y: 2, Z: 3, COMP: 4}
 
+MAT_EXT = 'mat'
+
 
 # %% Functions
 def probe_mask(ax_data, probe_coord, probe_D):
@@ -38,77 +40,6 @@ def probe_mask(ax_data, probe_coord, probe_D):
     # Normalize
     probe_mask /= np.sum(probe_mask)
     return probe_mask
-
-
-def plot_2D(x, y, data,
-            xlabel='', ylabel='', title='',
-            cmin=None, cmax=None, cmap='OrRd',
-            add_plot_func=None,
-            file=None):
-    if cmax is None:
-        cmax = np.max(data)
-    if cmin is None:
-        cmin = np.min(data)
-    cmap = plt.get_cmap(cmap)
-
-    fig, ax = plt.subplots(figsize=(10, 8))
-    xm, ym = np.meshgrid(x, y)
-    im = ax.pcolormesh(xm, ym, np.transpose(data),
-                       vmin=cmin, vmax=cmax,
-                       cmap=cmap,
-                       shading='auto')
-    ax.set_aspect('equal')
-    fig.colorbar(im)
-    ax.set_title(title)
-    ax.set_xlabel(xlabel, fontsize=14)
-    ax.set_ylabel(ylabel, fontsize=14)
-
-    if add_plot_func is not None:
-        add_plot_func(ax)
-
-    fig.tight_layout()
-
-    if file is not None:
-        fig.savefig(file)
-
-
-def animate_2D(x, y, data,
-               xlabel='', ylabel='', title='',
-               cmin=None, cmax=None, cmap='bwr',
-               add_plot_func=None,
-               frame_interval=100,
-               file=None):
-    if cmax is None:
-        cmax = np.max(data)
-    if cmin is None:
-        cmin = np.min(data)
-    cmap = plt.get_cmap(cmap)
-
-    fig, ax = plt.subplots(figsize=(10, 8))
-    xm, ym = np.meshgrid(x, y)
-    im = ax.pcolormesh(xm, ym, np.transpose(data[0]),
-                       vmin=cmin, vmax=cmax,
-                       cmap=cmap,
-                       shading='auto')
-    ax.set_aspect('equal')
-    fig.colorbar(im)
-    ax.set_title(title)
-    ax.set_xlabel(xlabel, fontsize=14)
-    ax.set_ylabel(ylabel, fontsize=14)
-
-    if add_plot_func is not None:
-        add_plot_func(ax)
-
-    fig.tight_layout()
-
-    def animate(i):
-        im.set_array(np.transpose(data[i]).flatten())
-        return im
-
-    anim = animation.FuncAnimation(fig, animate,
-                                   interval=frame_interval,
-                                   frames=len(data)-1)
-    anim.save(file)
 
 
 # %% Classes
@@ -186,6 +117,22 @@ class MatFileData(ABC):
         self.parameters = parameters
         self.extra = extra
 
+    @property
+    def _filename(self):
+        if self._file is not None:
+            fname = get_filename(self._file)
+        else:
+            fname = None
+        return fname
+
+    @property
+    def _folder(self):
+        if self._file is not None:
+            folder = os.path.dirname(self._file)
+        else:
+            folder = None
+        return folder
+
     @classmethod
     def load(cls, file: Path) -> 'MatFileData':
         mat_dict = loadmat(file)
@@ -236,6 +183,9 @@ class MatFileData(ABC):
     def save(self, file: Optional[Path] = None) -> None:
         if file is None:
             file = self._file
+        else:
+            self._file = file
+
         if self.quantity.unit == '':
             q_unit = '1'
         else:
@@ -270,7 +220,7 @@ class MatFileData(ABC):
                     'data': data}
         if self.extra is not None:
             mat_dict['extra'] = self.extra
-        savemat(file, mat_dict, do_compression=False)
+        savemat(file, mat_dict, do_compression=False, appendmat=True)
 
     def delete(self) -> None:
         # Delete file to save space
@@ -408,17 +358,17 @@ class MatFileData(ABC):
 
         if layer_index is not None:
             layer_coord = self.get_axis_data(normal)[layer_index]
-            title += f' @ {normal} = {layer_coord:.2f}{self.grid.unit}'
+            title += f' @ {normal} = {layer_coord:.2f} {self.grid.unit}'
 
         return title
 
-    def _get_plot_filepath(self, save_path: str, extension: str) -> str:
-        filename = get_filename(self._file)
+    def _get_plot_filepath(self, save_path: Optional[str],
+                           extension: str) -> str:
         if save_path is None:
-            file = os.path.join(os.path.dirname(self._file),
-                                f'{filename}.{extension}')
+            file = os.path.join(self._folder,
+                                f'{self._filename}.{extension}')
         elif os.path.isdir(save_path):
-            file = os.path.join(save_path, f'{filename}.{extension}')
+            file = os.path.join(save_path, f'{self._filename}.{extension}')
         else:
             file = save_path
         return file
@@ -451,17 +401,44 @@ class VectorData(MatFileData):
         return True
 
     def get_component(self, component: Ax) -> 'ScalarData':
+        if self._file is not None:
+            file = os.path.join(self._folder,
+                                self._filename + f'.{component}.{MAT_EXT}')
+        else:
+            file = None
+
         if component in self.quantity.components:
             q_name = f'{self.quantity.name}_{component}'
             quantity = Quantity(q_name, self.quantity.unit, 1)
             obj = ScalarData(self.time, self.grid, quantity,
                              self.data[..., XYZ[component]],
                              f'{self.title}_{component}',
-                             self.parameters, self.extra, self._file)
+                             self.parameters, self.extra, file)
         else:
             err = f'{self.quantity.name} has no {component}-component'
             raise RuntimeError(err)
         return obj
+
+    def plot_amplitude(self, *args, **kwargs) -> List[plt.Axes]:
+        axes = []
+        for c in self.quantity.components:
+            scalar = self.get_component(c)
+            axes += [scalar.plot_amplitude(*args, **kwargs)]
+        return axes
+
+    def create_animation(self, *args, **kwargs) -> List[plt.Axes]:
+        axes = []
+        for c in self.quantity.components:
+            scalar = self.get_component(c)
+            axes += [scalar.create_animation(*args, **kwargs)]
+        return axes
+
+    def get_probe_signals(self, *args, **kwargs) -> List[Signal]:
+        signals = []
+        for c in self.quantity.components:
+            scalar = self.get_component(c)
+            signals += [scalar.get_probe_signals(*args, **kwargs)]
+        return signals
 
 
 class ScalarData(MatFileData):
@@ -486,11 +463,14 @@ class ScalarData(MatFileData):
         # Ignore component
         return self
 
-    def plot_amplitude(self, normal=Z, layer_index=None,
-                       cmin=None, cmax=None, cmap='OrRd',
-                       add_plot_func=None,
-                       save_path=None,
-                       extension='png') -> None:
+    def plot_amplitude(self, normal: Ax = Z,
+                       layer_index: Optional[int] = None,
+                       cmap: str = 'OrRd',
+                       vmin: Optional[float] = None,
+                       vmax: Optional[float] = None,
+                       add_plot_func: Optional[Callable] = None,
+                       save_path: Optional[Path] = None,
+                       extension: str = 'png') -> plt.Axes:
         title = self._get_plot_title(normal, layer_index)
         file = self._get_plot_filepath(save_path, extension)
         axes = [ax for ax in XYZ if ax != normal]
@@ -501,22 +481,28 @@ class ScalarData(MatFileData):
         data_amp = ((data.max(axis=AX_NUM[T])
                      - data.min(axis=AX_NUM[T])) / 2)
 
-        plot_2D(axes_data[0], axes_data[1], data_amp,
-                xlabel=f'{axes[0]}, {self.grid.unit}',
-                ylabel=f'{axes[1]}, {self.grid.unit}',
-                title=title,
-                cmin=cmin,
-                cmax=cmax,
-                cmap=cmap,
-                add_plot_func=add_plot_func,
-                file=file)
+        ax = plot_2D(axes_data[0], axes_data[1], data_amp,
+                     xlabel=f'{axes[0]}, {self.grid.unit}',
+                     ylabel=f'{axes[1]}, {self.grid.unit}',
+                     title=title,
+                     cmap=cmap,
+                     vmin=vmin, vmax=vmax,
+                     add_plot_func=add_plot_func,
+                     file=file)
+        return ax
 
-    def create_animation(self, normal=Z, layer_index=None,
-                         cmin=None, cmax=None, cmap='bwr',
-                         add_plot_func=None,
-                         time_factor=2e9,
-                         save_path=None,
-                         extension='mp4') -> None:
+    def create_animation(self, normal: Ax = Z,
+                         layer_index: Optional[int] = None,
+                         cmap: str = 'bwr',
+                         vmin: Optional[float] = None,
+                         vmax: Optional[float] = None,
+                         add_plot_func: Optional[Callable] = None,
+                         time_factor: float = 2e9,
+                         save_path: Optional[Path] = None,
+                         extension: str = 'mp4') -> plt.Axes:
+        if len(self.time.values) < 2:
+            return None
+
         title = self._get_plot_title(normal, layer_index)
         file = self._get_plot_filepath(save_path, extension)
 
@@ -527,16 +513,17 @@ class ScalarData(MatFileData):
         axes = [ax for ax in XYZ if ax != normal]
         axes_data = [self.get_axis_data(ax, mesh=True) for ax in axes]
         data = self.get_plane_data(normal, layer_index)
-        animate_2D(axes_data[0], axes_data[1], data,
-                   xlabel=f'{axes[0]}, {self.grid.unit}',
-                   ylabel=f'{axes[1]}, {self.grid.unit}',
-                   title=title,
-                   cmin=cmin,
-                   cmax=cmax,
-                   cmap=cmap,
-                   add_plot_func=add_plot_func,
-                   frame_interval=frame_interval.value,
-                   file=file)
+        ax = animate_2D(self.time.values, self.time.unit,
+                        axes_data[0], axes_data[1], data,
+                        xlabel=f'{axes[0]}, {self.grid.unit}',
+                        ylabel=f'{axes[1]}, {self.grid.unit}',
+                        title=title,
+                        cmap=cmap,
+                        vmin=vmin, vmax=vmax,
+                        add_plot_func=add_plot_func,
+                        frame_interval=frame_interval.value,
+                        file=file)
+        return ax
 
     def get_probe_signals(self,
                           probe_coordinates: List[Tuple[float, float]],
