@@ -5,10 +5,11 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 import numpy as np
 import os
+from abc import ABC, abstractmethod
 from scipy.io import loadmat, savemat
 from astropy import units as u
 from dataclasses import dataclass
-from typing import List, Tuple, Callable, Optional
+from typing import List, Tuple, Dict, Callable, Optional
 from .utilities import extract_parameters, get_filename
 from .signal import Signal
 
@@ -16,6 +17,7 @@ from .signal import Signal
 # %% Types
 # X, Y or Z
 Ax = str
+Path = str
 
 
 # %% Constants
@@ -25,7 +27,7 @@ X, Y, Z = 'x', 'y', 'z'
 COMP = 'component'
 
 XYZ = {X: IX, Y: IY, Z: IZ}
-AX_NUM = {COMP: 0, T: 1, X: 2, Y: 3, Z: 4}
+AX_NUM = {T: 0, X: 1, Y: 2, Z: 3, COMP: 4}
 
 
 # %% Functions
@@ -121,7 +123,7 @@ class Grid:
     nodes: np.ndarray
     size: np.ndarray
     step: np.ndarray
-    base: np.ndarray
+    base: Optional[np.ndarray]
     unit: str
 
     def __post_init__(self) -> None:
@@ -137,7 +139,7 @@ class Quantity:
     name: str
     unit: str
     dimension: int
-    components: Optional[List[str]]
+    components: Optional[List[str]] = None
 
     def __post_init__(self) -> None:
         if self.unit == '1':
@@ -150,66 +152,88 @@ class Quantity:
         return s
 
 
-class MatFileData:
+class MatFileData(ABC):
     """
-    Class for vector field data:
-
-        [vector component, time, x, y, z]
+    Abstract class for vector field data stored in mat-files
 
     Attributes:
-        time (Time): time object
-        grid (Grid): grid object
-        quantity (Quantity): quantity object
-        data (np.ndarray): 5-dimensional array with the following shape:
-            [vector components, time steps, x nodes, y nodes, z nodes]
-        extra (dict): any extra data
-        parameters (dict): parameters names and values from the filename
+        time: time object
+        grid: grid object
+        quantity: quantity object
+        data: 5-dimensional array with the following shape:
+            [time steps, x nodes, y nodes, z nodes, vector components]
+        title: data title
+        extra: any extra data
+        parameters: dict of parameters names and values from the filename
     """
 
-    def __init__(self, file) -> None:
+    def __init__(self,
+                 time: Time,
+                 grid: Grid,
+                 quantity: Quantity,
+                 data: np.ndarray,
+                 title: Optional[str] = None,
+                 parameters: Optional[Dict[str, Tuple[float, str]]] = None,
+                 extra: Optional[Dict] = None,
+                 file: Optional[Path] = None) -> None:
         self._file = file
+
+        self.time = time
+        self.grid = grid
+        self.quantity = quantity
+        self.data = data
+        self.title = title
+        self.parameters = parameters
+        self.extra = extra
+
+    @classmethod
+    def load(cls, file: Path) -> 'MatFileData':
         mat_dict = loadmat(file)
 
-        self.title = mat_dict['title']
+        title = mat_dict['title']
 
-        time = mat_dict['time'][0][0]
-        self.time = Time(time['values'][0],
-                         time['unit'][0])
+        time_struct = mat_dict['time'][0][0]
+        time = Time(time_struct['values'][0],
+                    time_struct['unit'][0])
 
-        grid = mat_dict['grid'][0][0]
-        self.grid = Grid(grid['nodes'][0],
-                         grid['size'][0],
-                         grid['step'][0],
-                         grid['base'][0],
-                         grid['unit'][0])
+        grid_struct = mat_dict['grid'][0][0]
+        grid = Grid(grid_struct['nodes'][0],
+                    grid_struct['size'][0],
+                    grid_struct['step'][0],
+                    grid_struct['base'][0],
+                    grid_struct['unit'][0])
 
-        quantity = mat_dict['quantity'][0][0]
-        q_labels = list(quantity['labels'])
+        quantity_struct = mat_dict['quantity'][0][0]
+        q_labels = list(quantity_struct['labels'])
         # Quantity and unit should be the same
         q_name = os.path.commonprefix(q_labels).strip('_')
-        q_unit = os.path.commonprefix(list(quantity['units']))
-        q_dim = quantity['dimension'][0][0]
+        q_unit = os.path.commonprefix(list(quantity_struct['units']))
+        q_dim = quantity_struct['dimension'][0][0]
         if q_dim > 1:
-            # Vector components
+            # Vector
+            subclass = VectorData
             q_components = [lbl[-1] for lbl in q_labels]
+            data = mat_dict['data']
         else:
+            # Scalar
+            subclass = ScalarData
             q_components = None
-        self.quantity = Quantity(q_name,
-                                 q_unit,
-                                 q_dim,
-                                 q_components)
+            data = mat_dict['data'][..., 0]
 
-        if 'extra' in mat_dict:
-            self.extra = mat_dict['extra'][0][0]
-        else:
-            self.extra = None
+        quantity = Quantity(q_name,
+                            q_unit,
+                            q_dim,
+                            q_components)
 
-        self.data = mat_dict['data']
+        parameters_dict = extract_parameters(get_filename(file))
 
-        self._filename = get_filename(file)
-        self.parameters = extract_parameters(self._filename)
+        extra_struct = mat_dict['extra'][0][0] if 'extra' in mat_dict else None
 
-    def save(self, file: Optional[str] = None) -> None:
+        obj = subclass(time, grid, quantity, data, title,
+                       parameters_dict, extra_struct, file)
+        return obj
+
+    def save(self, file: Optional[Path] = None) -> None:
         if file is None:
             file = self._file
         if self.quantity.unit == '':
@@ -225,6 +249,12 @@ class MatFileData:
             q_labels = [self.quantity.name]
             q_units = [self.quantity.unit]
 
+        if self.is_vector() is False:
+            # Add components axis
+            data = self.data[..., np.newaxis]
+        else:
+            data = self.data
+
         # Save modified data
         mat_dict = {'title': self.title,
                     'time': {'values': self.time.values,
@@ -236,16 +266,16 @@ class MatFileData:
                              'unit': self.grid.unit},
                     'quantity': {'dimension': self.quantity.dimension,
                                  'labels': q_labels,
-                                 'units': q_units,
-                                 },
-                    'data': self.data}
+                                 'units': q_units},
+                    'data': data}
         if self.extra is not None:
             mat_dict['extra'] = self.extra
         savemat(file, mat_dict, do_compression=False)
 
     def delete(self) -> None:
         # Delete file to save space
-        os.remove(self._file)
+        if self._file is not None:
+            os.remove(self._file)
 
     def set_coord(self, coord: Tuple[float, float, float] = (0, 0, 0)) -> None:
         self.grid.set_coord(coord)
@@ -312,18 +342,16 @@ class MatFileData:
         """
         if component is not None and self.quantity.dimension > 1:
             if component in self.quantity.components:
-                data = self.data[[XYZ[component]]]
+                data = self.data[..., [XYZ[component]]]
             else:
-                err = f'{self.quantity.name} have no {component}-component'
+                err = f'{self.quantity.name} has no {component}-component'
                 raise RuntimeError(err)
         else:
             data = self.data
         return data
 
-    def get_plane_data(self,
-                       normal: Ax,
-                       layer_index: Optional[int] = None,
-                       component: Optional[Ax] = None) -> np.ndarray:
+    def get_plane_data(self, normal: Ax,
+                       layer_index: Optional[int] = None) -> np.ndarray:
         """
         Returns plane section of data array (without normal-axis dimension).
 
@@ -331,18 +359,15 @@ class MatFileData:
         ----------
         normal: normal of the plane
         layer_index: index of layer, if None return mean of all layers
-        component: vector component, if None return all components
 
         Returns
         -------
         data: data array
         """
-        data = self.get_data(component)
-
         if layer_index is None:
-            data = np.mean(data, axis=AX_NUM[normal])
+            data = np.mean(self.data, axis=AX_NUM[normal])
         else:
-            data = np.take(data, layer_index, axis=AX_NUM[normal])
+            data = np.take(self.data, layer_index, axis=AX_NUM[normal])
         return data
 
     def crop_time(self,
@@ -371,14 +396,9 @@ class MatFileData:
             self.grid.nodes[i] = len(c)
             self.grid.coord[i] = c[0] - self.grid.step[i]/2
 
-    def _get_plot_title(self, component: Ax, normal: Ax,
-                        layer_index: int) -> str:
-        if self.quantity.dimension == 1:
-            title = f'{self.quantity.name}'
-        else:
-            title = f'{self.quantity.name}_{component}'
-        if self.quantity.unit != '':
-            title += f', {self.quantity.unit}'
+    def _get_plot_title(self, normal: Ax,
+                        layer_index: Optional[int] = None) -> str:
+        title = f'{self.quantity}'
 
         if len(self.parameters) > 0:
             p = []
@@ -393,29 +413,93 @@ class MatFileData:
         return title
 
     def _get_plot_filepath(self, save_path: str, extension: str) -> str:
+        filename = get_filename(self._file)
         if save_path is None:
             file = os.path.join(os.path.dirname(self._file),
-                                f'{self._filename}.{extension}')
+                                f'{filename}.{extension}')
         elif os.path.isdir(save_path):
-            file = os.path.join(save_path, f'{self._filename}.{extension}')
+            file = os.path.join(save_path, f'{filename}.{extension}')
         else:
             file = save_path
         return file
 
-    def plot_amplitude(self, component, normal=Z, layer_index=None,
+    @abstractmethod
+    def is_vector(self) -> bool:
+        pass
+
+    @abstractmethod
+    def get_component(self, component: Ax) -> 'ScalarData':
+        pass
+
+
+class VectorData(MatFileData):
+    """
+    Class for vector field data
+
+    Attributes:
+        time: time object
+        grid: grid object
+        quantity: quantity object
+        data: 5-dimensional array with the following shape:
+            [time steps, x nodes, y nodes, z nodes, vector components]
+        title: data title
+        extra: any extra data
+        parameters: dict of parameters names and values from the filename
+    """
+
+    def is_vector(self) -> bool:
+        return True
+
+    def get_component(self, component: Ax) -> 'ScalarData':
+        if component in self.quantity.components:
+            q_name = f'{self.quantity.name}_{component}'
+            quantity = Quantity(q_name, self.quantity.unit, 1)
+            obj = ScalarData(self.time, self.grid, quantity,
+                             self.data[..., XYZ[component]],
+                             f'{self.title}_{component}',
+                             self.parameters, self.extra, self._file)
+        else:
+            err = f'{self.quantity.name} has no {component}-component'
+            raise RuntimeError(err)
+        return obj
+
+
+class ScalarData(MatFileData):
+    """
+    Class for vector field data
+
+    Attributes:
+        time: time object
+        grid: grid object
+        quantity: quantity object
+        data: 4-dimensional array with the following shape:
+            [time steps, x nodes, y nodes, z nodes]
+        title: data title
+        extra: any extra data
+        parameters: dict of parameters names and values from the filename
+    """
+
+    def is_vector(self) -> bool:
+        return False
+
+    def get_component(self, component: Ax) -> 'ScalarData':
+        # Ignore component
+        return self
+
+    def plot_amplitude(self, normal=Z, layer_index=None,
                        cmin=None, cmax=None, cmap='OrRd',
                        add_plot_func=None,
                        save_path=None,
                        extension='png') -> None:
-        title = self._get_plot_title(component, normal, layer_index)
+        title = self._get_plot_title(normal, layer_index)
         file = self._get_plot_filepath(save_path, extension)
         axes = [ax for ax in XYZ if ax != normal]
         axes_data = [self.get_axis_data(ax, mesh=True) for ax in axes]
 
         # Amplitude = maximum - minimum over time
-        data = self.get_plane_data(normal, layer_index, component)
+        data = self.get_plane_data(normal, layer_index)
         data_amp = ((data.max(axis=AX_NUM[T])
-                     - data.min(axis=AX_NUM[T])) / 2)[0]
+                     - data.min(axis=AX_NUM[T])) / 2)
 
         plot_2D(axes_data[0], axes_data[1], data_amp,
                 xlabel=f'{axes[0]}, {self.grid.unit}',
@@ -427,13 +511,13 @@ class MatFileData:
                 add_plot_func=add_plot_func,
                 file=file)
 
-    def create_animation(self, component, normal=Z, layer_index=None,
+    def create_animation(self, normal=Z, layer_index=None,
                          cmin=None, cmax=None, cmap='bwr',
                          add_plot_func=None,
                          time_factor=2e9,
                          save_path=None,
                          extension='mp4') -> None:
-        title = self._get_plot_title(component, normal, layer_index)
+        title = self._get_plot_title(normal, layer_index)
         file = self._get_plot_filepath(save_path, extension)
 
         delta_t = ((self.time.values[-1] - self.time.values[0])
@@ -442,7 +526,7 @@ class MatFileData:
 
         axes = [ax for ax in XYZ if ax != normal]
         axes_data = [self.get_axis_data(ax, mesh=True) for ax in axes]
-        data = self.get_plane_data(normal, layer_index, component)[0]
+        data = self.get_plane_data(normal, layer_index)
         animate_2D(axes_data[0], axes_data[1], data,
                    xlabel=f'{axes[0]}, {self.grid.unit}',
                    ylabel=f'{axes[1]}, {self.grid.unit}',
@@ -456,7 +540,6 @@ class MatFileData:
 
     def get_probe_signals(self,
                           probe_coordinates: List[Tuple[float, float]],
-                          probing_component: Ax,
                           probe_axis: Ax = Z,
                           probe_D: float = 0) -> Signal:
         """ Get signals by probing """
@@ -467,8 +550,7 @@ class MatFileData:
         # Axes perpendicular to probe axis
         axes = [a for a in XYZ if a != probe_axis]
         ax_data = [self.get_axis_data(i) for i in axes]
-        data = self.get_plane_data(normal=probe_axis,
-                                   component=probing_component)[0]
+        data = self.get_plane_data(normal=probe_axis)
 
         for p_coord in probe_coordinates:
             if probe_D == 0:
