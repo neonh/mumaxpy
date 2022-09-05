@@ -69,20 +69,19 @@ class Simulation:
 
     def _check_max_angle(self, df):
         s = None
-        if self.max_angle is not None:
-            if MAX_ANGLE in df.columns:
-                m_angle = df[MAX_ANGLE]
-                maximum = max(m_angle)
-                print(f'MaxAngle={maximum:.6f} rad')
+        if self.max_angle is not None and MAX_ANGLE in df.columns:
+            m_angle = df[MAX_ANGLE]
+            maximum = max(m_angle)
+            print(f'MaxAngle={maximum:.6f} rad')
 
-                if maximum > self.max_angle:
-                    it_qty = len(df)
-                    th_it_qty = len(df[df[MAX_ANGLE] > self.max_angle])
-                    p = th_it_qty / it_qty
-                    s = ('WARNING! MaxAngle was > '
-                         + f'{self.max_angle:.2f} rad during {p:.1%} '
-                         + 'of simulation time.')
-                    print(s)
+            if maximum > self.max_angle:
+                it_qty = len(df)
+                th_it_qty = len(df[df[MAX_ANGLE] > self.max_angle])
+                p = th_it_qty / it_qty
+                s = ('WARNING! MaxAngle was > '
+                     + f'{self.max_angle:.2f} rad during {p:.1%} '
+                     + 'of simulation time.')
+                print(s)
         return s
 
     def _plot_table(self, df, output_dir, title='', fname=''):
@@ -248,7 +247,7 @@ class Simulation:
                 script.modify_parameter(v, var_value[i])
                 v_list += [script.get_parameter_str(v)]
             var_str = ', '.join(v_list)
-            if len(v_list) > 0:
+            if len(v_list) > 0 and v_list[0] != '':
                 fvar_str = '_{' + '}_{'.join(v_list).replace(' ', '') + '}'
             else:
                 fvar_str = ''
@@ -288,8 +287,9 @@ class Simulation:
             shutil.move(table_file, table_copy_file)
 
             # %% Convert ovf files
-            ovf_to_mat(output_dir,
-                       output_dir=sub_dirs[MAT_FILES],
+            out_dir = os.path.join(sub_dirs[MAT_FILES], *v_list[:-1])
+            ovf_to_mat(input_dir=output_dir,
+                       output_dir=out_dir,
                        filename_suffix=fvar_str)
 
             # %% Get table data
