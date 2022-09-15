@@ -28,6 +28,7 @@ COMP = 'component'
 
 XYZ = {X: IX, Y: IY, Z: IZ}
 AX_NUM = {T: 0, X: 1, Y: 2, Z: 3, COMP: 4}
+AX_NAME = {num: name for name, num in AX_NUM.items()}
 
 MAT_EXT = 'mat'
 
@@ -258,24 +259,48 @@ class MatFileData(ABC):
     def get_shape(self) -> Tuple:
         return self.data.shape
 
-    def get_time_data(self) -> None:
-        return self.time.values
+    def get_time_data(self, mesh: bool = False) -> np.ndarray:
+        """ Return time values
+            If mesh is False
+            then return N values: time[:],
+            else return N+1 values: time[:] + [time[-1] + dt]"""
+        if mesh is False:
+            t_data = self.time.values
+        else:
+            time = self.time.values
+            dt = (time[-1] - time[0]) / time.size
+            t_data = [time] + [time[-1] + dt]
+        return t_data
 
     def get_axis_data(self, axis: Ax, mesh: bool = False) -> np.ndarray:
         """ Return nodes coordinates for selected axis
             If mesh is False
             then return N values for coordinates of cell centers,
             else return N+1 values for coordinates of cell boundaries"""
-        i = XYZ[axis]
-        if mesh is False:
-            base = self.grid.coord[i] + self.grid.step[i]/2
-            ax_data = np.r_[base: base + self.grid.size[i]:
-                            self.grid.step[i]]
+        if axis == T:
+            ax_data = self.get_time_data(mesh)
         else:
-            base = self.grid.coord[i]
-            ax_data = np.r_[base: base + self.grid.size[i]:
-                            1j*(self.grid.nodes[i] + 1)]
+            i = XYZ[axis]
+            if mesh is False:
+                base = self.grid.coord[i] + self.grid.step[i]/2
+                ax_data = np.r_[base: base + self.grid.size[i]:
+                                self.grid.step[i]]
+            else:
+                base = self.grid.coord[i]
+                ax_data = np.r_[base: base + self.grid.size[i]:
+                                1j*(self.grid.nodes[i] + 1)]
         return ax_data
+
+    def find_index(self, axis: Ax, value: float) -> int:
+        """ Return nearest index """
+        ax_data = self.get_axis_data(axis, mesh=True)
+        if (value > ax_data[-1]) or (value < ax_data[0]):
+            raise ValueError('Value is out of range')
+        else:
+            idx = np.searchsorted(ax_data, value) - 1
+            if idx < 0:
+                idx = 0
+        return idx
 
     def get_data(self, component: Optional[Ax] = None) -> np.ndarray:
         """
@@ -300,8 +325,26 @@ class MatFileData(ABC):
             data = self.data
         return data
 
-    def get_plane_data(self, normal: Ax,
-                       layer_index: Optional[int] = None) -> np.ndarray:
+    def get_section_data(self, t: Optional[float] = None,
+                         x: Optional[float] = None,
+                         y: Optional[float] = None,
+                         z: Optional[float] = None,
+                         squeeze: bool = False) -> np.ndarray:
+        """ Return section of data array with selected planes coordinates
+            If squeeze is False - number of array dimensions remains unchanged
+        """
+        data = self.data
+        for ax_num, val in enumerate([t, x, y, z]):
+            if val is not None:
+                idx = self.find_index(AX_NAME[ax_num], val)
+                data = np.take(data, [idx], axis=ax_num)
+
+        if squeeze:
+            data = data.squeeze()
+        return data
+
+    def get_planar_data(self, normal: Ax,
+                        layer_index: Optional[int] = None) -> np.ndarray:
         """
         Returns plane section of data array (without normal-axis dimension).
 
@@ -477,7 +520,7 @@ class ScalarData(MatFileData):
         axes_data = [self.get_axis_data(ax, mesh=True) for ax in axes]
 
         # Amplitude = maximum - minimum over time
-        data = self.get_plane_data(normal, layer_index)
+        data = self.get_planar_data(normal, layer_index)
         data_amp = ((data.max(axis=AX_NUM[T])
                      - data.min(axis=AX_NUM[T])) / 2)
 
@@ -512,7 +555,7 @@ class ScalarData(MatFileData):
 
         axes = [ax for ax in XYZ if ax != normal]
         axes_data = [self.get_axis_data(ax, mesh=True) for ax in axes]
-        data = self.get_plane_data(normal, layer_index)
+        data = self.get_planar_data(normal, layer_index)
         ax = animate_2D(self.time.values, self.time.unit,
                         axes_data[0], axes_data[1], data,
                         xlabel=f'{axes[0]}, {self.grid.unit}',
@@ -537,13 +580,13 @@ class ScalarData(MatFileData):
         # Axes perpendicular to probe axis
         axes = [a for a in XYZ if a != probe_axis]
         ax_data = [self.get_axis_data(i) for i in axes]
-        data = self.get_plane_data(normal=probe_axis)
+        data = self.get_planar_data(normal=probe_axis)
 
         for p_coord in probe_coordinates:
             if probe_D == 0:
                 # Get near indexes
-                idx = [[i for i in range(len(ax_data[n]))
-                        if ax_data[n][i] >= p_coord[n]][0] for n in range(2)]
+                idx = [self.find_index(axes[n], p_coord[n])
+                       for n in range(2)]
                 signal = data[:, idx[0], idx[1]]
             else:
                 signal = np.sum(data * probe_mask(ax_data, p_coord, probe_D),
