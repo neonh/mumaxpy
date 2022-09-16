@@ -575,7 +575,9 @@ class ScalarData(MatFileData):
         """ Get signals by probing """
         sig = Signal(self.time.values, 'Time', self.time.unit,
                      self.quantity.name, self.quantity.unit,
-                     'Probe coordinates', self.grid.unit)
+                     title=self._filename,
+                     legend_name='Probe coordinates',
+                     legend_unit=self.grid.unit)
 
         # Axes perpendicular to probe axis
         axes = [a for a in XYZ if a != probe_axis]
