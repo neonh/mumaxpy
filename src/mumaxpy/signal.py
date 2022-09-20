@@ -48,6 +48,14 @@ class Signal:
         self.title = title
         self.legend = Label(legend_name, legend_unit)
 
+    def _get_file_path(self, save_path: Path,
+                       default_filename: str) -> Path:
+        if os.path.isdir(save_path):
+            file = os.path.join(save_path, default_filename)
+        else:
+            file = save_path
+        return file
+
     def set_title(self, title: str) -> None:
         self.title = title
 
@@ -89,10 +97,33 @@ class Signal:
         fig.tight_layout()
 
         if save_path is not None:
-            if os.path.isdir(save_path):
-                file = os.path.join(save_path, f'signal_{self.title}.png')
-            else:
-                file = save_path
+            file = self._get_file_path(save_path, f'signal_{self.title}.png')
+            fig.savefig(file)
+
+        return ax
+
+    def plot_2D(self, save_path: Optional[Path] = None,
+                cmap: str = 'bwr',
+                vmin: Optional[float] = None,
+                vmax: Optional[float] = None) -> plt.Axes:
+        x_values = self.df.columns.values
+        if all(isinstance(x, (int, float)) for x in x_values) is False:
+            x_values = [str(x) for x in x_values]
+
+        fig, ax = plt.subplots()
+        im = ax.pcolormesh(x_values, self.df.index.values,
+                           self.df,
+                           cmap=cmap, vmin=vmin, vmax=vmax)
+        ax.set_title(self.title)
+        ax.set_xlabel(str(self.legend))
+        ax.set_ylabel(str(self.x))
+        cbar = fig.colorbar(im)
+        cbar.set_label(str(self.y))
+        fig.tight_layout()
+
+        if save_path is not None:
+            file = self._get_file_path(save_path,
+                                       f'signal_2D_{self.title}.png')
             fig.savefig(file)
 
         return ax
@@ -106,10 +137,7 @@ class Signal:
                             df.columns),
                         names=(self.x.name, self.x.unit, f'{self.legend}:'))
 
-        if os.path.isdir(save_path):
-            file = os.path.join(save_path, f'signal_{self.title}.dat')
-        else:
-            file = save_path
+        file = self._get_file_path(save_path, f'signal_{self.title}.dat')
         df.to_csv(file, sep='\t')
 
     def fft(self, amp_mul: float = 1.0,
