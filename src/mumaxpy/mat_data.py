@@ -8,7 +8,8 @@ from abc import ABC, abstractmethod
 from scipy.io import loadmat, savemat
 from astropy import units as u
 from dataclasses import dataclass
-from typing import List, Tuple, Dict, Callable, Optional
+from itertools import zip_longest
+from typing import List, Tuple, Dict, Iterable, Callable, Optional
 from .utilities import extract_parameters, get_filename
 from .signal import Signal
 from .plot import plot_2D, animate_2D
@@ -18,6 +19,7 @@ from .plot import plot_2D, animate_2D
 # X, Y or Z
 Ax = str
 Path = str
+CoordinatesTuple = Tuple[Iterable[float], Iterable[float]]
 
 
 # %% Constants
@@ -569,22 +571,51 @@ class ScalarData(MatFileData):
         return ax
 
     def get_probe_signals(self,
-                          probe_coordinates: List[Tuple[float, float]],
+                          probe_coordinates: CoordinatesTuple,
                           probe_axis: Ax = Z,
                           probe_D: float = 0) -> Signal:
-        """ Get signals by probing """
-        sig = Signal(self.time.values, 'Time', self.time.unit,
-                     self.quantity.name, self.quantity.unit,
-                     title=self._filename,
-                     legend_name='Probe coordinates',
-                     legend_unit=self.grid.unit)
+        """ Get signals by probing
 
+        Parameters
+        ----------
+        probe_coordinates: tuple of two lists (iterables) with coordinates.
+            If length of one list is 1 then this coordinate assumed fixed.
+            For example:
+                ([1, 2, 3], [0]) is the same as ([1, 2, 3], [0, 0, 0])
+        probe_axis: axis of probe beam.
+            Normal to plane where coordinates are defined.
+        probe_D: diameter of probe.
+
+        Returns
+        -------
+        sig: Signal
+        """
         # Axes perpendicular to probe axis
         axes = [a for a in XYZ if a != probe_axis]
         ax_data = [self.get_axis_data(i) for i in axes]
         data = self.get_planar_data(normal=probe_axis)
 
-        for p_coord in probe_coordinates:
+        # If one coordinate is fixed
+        is_single_coord = [len(pc) == 1 for pc in probe_coordinates]
+        if is_single_coord[0] != is_single_coord[1]:
+            fix_idx, alt_idx = (0, 1) if is_single_coord[0] is True else (1, 0)
+            fix_coord = probe_coordinates[fix_idx][0]
+            fix_ax_str = f'{axes[fix_idx]}={fix_coord}'
+            legend_name = f'Probe {axes[alt_idx]}-coordinate ({fix_ax_str})'
+            p_coord_list = zip_longest(*probe_coordinates,
+                                       fillvalue=fix_coord)
+        else:
+            alt_idx = None
+            legend_name = f'Probe coordinates ({axes[0]}, {axes[1]})'
+            p_coord_list = zip(*probe_coordinates)
+
+        sig = Signal(self.time.values, 'Time', self.time.unit,
+                     self.quantity.name, self.quantity.unit,
+                     title=self._filename,
+                     legend_name=legend_name,
+                     legend_unit=self.grid.unit)
+
+        for p_coord in p_coord_list:
             if probe_D == 0:
                 # Get near indexes
                 idx = [self.find_index(axes[n], p_coord[n])
@@ -594,6 +625,7 @@ class ScalarData(MatFileData):
                 signal = np.sum(data * probe_mask(ax_data, p_coord, probe_D),
                                 axis=(1, 2))
 
-            sig.add(signal, p_coord)
+            label = p_coord if alt_idx is None else p_coord[alt_idx]
+            sig.add(signal, label)
 
         return sig
