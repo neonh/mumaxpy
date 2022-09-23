@@ -513,6 +513,7 @@ class ScalarData(MatFileData):
                        cmap: str = 'OrRd',
                        vmin: Optional[float] = None,
                        vmax: Optional[float] = None,
+                       *,
                        add_plot_func: Optional[Callable] = None,
                        save_path: Optional[Path] = None,
                        extension: str = 'png') -> plt.Axes:
@@ -541,6 +542,7 @@ class ScalarData(MatFileData):
                          cmap: str = 'bwr',
                          vmin: Optional[float] = None,
                          vmax: Optional[float] = None,
+                         *,
                          add_plot_func: Optional[Callable] = None,
                          time_factor: float = 2e9,
                          save_path: Optional[Path] = None,
