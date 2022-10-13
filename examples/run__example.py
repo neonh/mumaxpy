@@ -1,8 +1,8 @@
 """
 Script for automated running of Mumax3 simulations
 """
+# %% Imports
 import os
-import glob
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -11,7 +11,8 @@ from mumaxpy.simulation import Simulation
 from mumaxpy.variables import Variables
 from mumaxpy.mx3_script import Parameters
 from mumaxpy.material import load_material
-from mumaxpy.mat_data import MatFileData
+from mumaxpy.data_processing import MatFilesProcessor
+from mumaxpy.verify import Verify
 from mumaxpy.run import run
 
 
@@ -180,7 +181,7 @@ def data_process_func(data: pd.DataFrame, units: dict, p: Parameters) -> dict:
 
 
 # %% Add plots and data to save
-def add_output(sim: Simulation, p: Parameters):
+def add_output(sim: Simulation, p: Parameters) -> None:
     """
     Configure output data and plots saving.
     For example:
@@ -203,7 +204,7 @@ def add_output(sim: Simulation, p: Parameters):
 
 
 # %% Postprocessing
-def post_processing(result_dir: str, p: Parameters):
+def post_processing(result_dir: str, p: Parameters) -> None:
     """
     Function to process data in result directory after simulations are done.
 
@@ -217,41 +218,31 @@ def post_processing(result_dir: str, p: Parameters):
     -------
     None
     """
+    time_unit = 'ns'
+    space_unit = 'um'
+
     def add_disk_plot(ax):
         # Plot circles for disks
-        d = p.Ddisk.to('um').value
+        d = p.Ddisk.to(space_unit).value
         circle = plt.Circle((0, 0), d/2, color='black', fill=False)
         ax.add_patch(circle)
 
-    # Mat-files pattern
-    file_pattern = '*.mat'
-    # Find files in result_dir and subdirs
-    mat_files = glob.glob(os.path.join(result_dir, '**', file_pattern),
-                          recursive=True)
+    # Process all files in result_dir
+    mp = MatFilesProcessor(result_dir)
 
-    for i, f in enumerate(mat_files):
-        folder = os.path.dirname(f)
-        fname = os.path.splitext(os.path.basename(f))[0]
-        print(f'#{i+1} of {len(mat_files)}: {fname}')
+    # Get x-component of vector
+    mp.get_component('x')
+    # Convert time and space units
+    mp.convert_units(time_unit, space_unit)
+    # Plot amplitude and save plot as picture
+    mp.plot_amplitude(add_plot_func=add_disk_plot)
+    # Create interactive plot and save as mp4-video
+    mp.create_animation(add_plot_func=add_disk_plot)
 
-        # Close previous plots
-        plt.close('all')
-
-        # Load mat-file data
-        m = MatFileData.load(f)
-        # Get x-component of vector
-        mx = m.get_component('x')
-        mx.convert_units('ns', 'um')
-        # Plot amplitude and save plot as picture
-        mx.plot_amplitude(normal='z',
-                          add_plot_func=add_disk_plot,
-                          save_path=folder)
-        # Create interactive plot and save as mp4-video
-        mx.create_animation(normal='z',
-                            add_plot_func=add_disk_plot,
-                            save_path=folder, extension='mp4')
-        # Delete mat-file to save space
-        m.delete()
+    # Run processing
+    mp.process()
+    # Delete mat-files to save space
+    mp.delete()
 
     return None
 
@@ -273,23 +264,12 @@ def verify(p: Parameters, v: Variables) -> bool:
     """
     is_ok = True
     if p.saveOVF:
-        SIZEOF_DATA = 4 * u.B
-        VECTOR_COMP_QTY = 3
-        iter_qty = v.get_full_length()
-        ovf_qty = (p.measureTime + p.relaxTime) / p.ovfSavePeriod
-        cells_qty = p.gridN_x * p.gridN_y * p.gridN_z
-        ovf_size = cells_qty * VECTOR_COMP_QTY * SIZEOF_DATA
-        single_ovf_size = (ovf_qty * ovf_size).to(u.GB)
-        all_ovf_size = iter_qty * single_ovf_size
-
-        print('OVF data size:',
-              f'{single_ovf_size:g} x {iter_qty} files = {all_ovf_size:g}')
-
-        if ((single_ovf_size > 0.5 * u.GB)
-                or (all_ovf_size > 4 * u.GB)):
-            print('WARNING! Check OVF files size')
-            is_ok = False
-
+        # Check the output mat-files size if saveOVF option enabled
+        is_ok &= Verify.mat_files_size(
+                    iter_qty=v.get_full_length(),
+                    cells_qty=(p.gridN_x * p.gridN_y * p.gridN_z),
+                    time=(p.measureTime + p.relaxTime),
+                    period=p.ovfSavePeriod)
     return is_ok
 
 
