@@ -1,8 +1,10 @@
 """
 Script for easy data processing
 """
+# %% Imports
 import os
 import numpy as np
+import matplotlib.pyplot as plt
 from typing import Optional
 from mumaxpy.utilities import get_filename, get_files_list
 from mumaxpy.mat_data import MatFileData
@@ -12,6 +14,10 @@ from mumaxpy.mat_data import MatFileData
 # X, Y or Z
 Ax = str
 Path = str
+
+
+# %% Constants
+DEFAULT_UNITS = {'time': 'ns', 'space': 'um'}
 
 
 # %% Functions
@@ -34,20 +40,26 @@ class MatFilesProcessor:
     """
 
     def __init__(self,
-                 filename_mask: str = '*.mat',
                  input_folder: Optional[Path] = None,
+                 recursive: bool = True,
+                 filename_mask: str = '*.mat',
                  output_folder: Optional[Path] = None,
-                 recursive: bool = True) -> None:
+                 close_plots: bool = True) -> None:
         """
         Set input and output folders
         """
         self.files = get_files_list(filename_mask, input_folder, recursive)
         self.out_folder = output_folder
+        self.close_plots = close_plots
 
         self.methods = {}
 
         # Set default methods arguments
-        self.convert_units(time_unit='ns', space_unit='um')
+        self.convert_units(time_unit=DEFAULT_UNITS['time'],
+                           space_unit=DEFAULT_UNITS['space'])
+
+    def set_output_folder(self, folder: Path) -> None:
+        self.out_folder = folder
 
     def process(self) -> None:
         """
@@ -75,30 +87,55 @@ class MatFilesProcessor:
                 args, kwargs = self.methods['convert_units']
                 m.convert_units(*args, **kwargs)
 
-            # Create amplitude plot and animation
-            mat_plot_methods_list = ['plot_amplitude',
-                                     'create_animation']
-            for method_name in mat_plot_methods_list:
-                if method_name in self.methods:
-                    args, kwargs = self.methods[method_name]
-                    kwargs['save_path'] = out_folder
-                    method = getattr(m, method_name)
-                    method(*args, **kwargs)
+            # Create amplitude plot
+            if 'plot_amplitude' in self.methods:
+                args, kwargs = self.methods['plot_amplitude']
+                kwargs['save_path'] = out_folder
+                ax = m.plot_amplitude(*args, **kwargs)
+                if self.close_plots:
+                    fig = ax.get_figure()
+                    plt.close(fig)
+
+            # Create animation
+            if 'create_animation' in self.methods and len(m.time.values) > 1:
+                args, kwargs = self.methods['create_animation']
+                kwargs['save_path'] = out_folder
+                ax = m.create_animation(*args, **kwargs)
+                if self.close_plots:
+                    fig = ax.get_figure()
+                    plt.close(fig)
 
             # Get signals by probing
             if 'get_probe_signals' in self.methods:
                 args, kwargs = self.methods['get_probe_signals']
                 sig = m.get_probe_signals(*args, **kwargs)
 
-                sig.plot(out_folder)
-                sig.plot_2D(out_folder)
+                ax = sig.plot(out_folder)
+                if self.close_plots:
+                    fig = ax.get_figure()
+                    plt.close(fig)
+
+                ax = sig.plot_2D(out_folder)
+                if self.close_plots:
+                    fig = ax.get_figure()
+                    plt.close(fig)
+
                 sig.save(out_folder)
 
                 # Get signals FFT
-                if 'get_probe_signals' in self.methods:
+                if 'get_probe_signals_fft' in self.methods:
                     sig_fft = sig.fft()
-                    sig_fft.plot(out_folder)
-                    sig_fft.plot_2D(out_folder)
+
+                    ax = sig_fft.plot(out_folder)
+                    if self.close_plots:
+                        fig = ax.get_figure()
+                        plt.close(fig)
+
+                    ax = sig_fft.plot_2D(out_folder)
+                    if self.close_plots:
+                        fig = ax.get_figure()
+                        plt.close(fig)
+
                     sig_fft.save(out_folder)
 
     def delete(self) -> None:
