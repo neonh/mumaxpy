@@ -1,6 +1,7 @@
 """
 Utilities
 """
+# %% Imports
 import os
 import glob
 import re
@@ -43,13 +44,13 @@ def get_files_list(filename_mask: str,
                    folder: Optional[Path] = None,
                    recursive: bool = True) -> List[Path]:
     if folder is None:
-        in_folder = choose_folder()
+        folder = choose_folder()
 
     if recursive is True:
-        files = glob.glob(os.path.join(in_folder, '**', filename_mask),
+        files = glob.glob(os.path.join(folder, '**', filename_mask),
                           recursive=True)
     else:
-        files = glob.glob(os.path.join(in_folder, filename_mask))
+        files = glob.glob(os.path.join(folder, filename_mask))
 
     return files
 
