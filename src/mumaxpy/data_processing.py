@@ -68,6 +68,8 @@ class MatFilesProcessor:
         n = len(self.files)
         for i, f in enumerate(self.files):
             print(f'#{i+1} of {n}: {get_filename(f)}')
+            # List of all axes objects
+            axes = []
 
             if self.out_folder is None:
                 out_folder = os.path.dirname(f)
@@ -92,51 +94,49 @@ class MatFilesProcessor:
                 args, kwargs = self.methods['plot_amplitude']
                 kwargs['save_path'] = out_folder
                 ax = m.plot_amplitude(*args, **kwargs)
-                if self.close_plots:
-                    fig = ax.get_figure()
-                    plt.close(fig)
+                axes += ax if isinstance(ax, list) else [ax]
 
             # Create animation
             if 'create_animation' in self.methods and len(m.time.values) > 1:
                 args, kwargs = self.methods['create_animation']
                 kwargs['save_path'] = out_folder
                 ax = m.create_animation(*args, **kwargs)
-                if self.close_plots:
-                    fig = ax.get_figure()
-                    plt.close(fig)
+                axes += ax if isinstance(ax, list) else [ax]
 
             # Get signals by probing
             if 'get_probe_signals' in self.methods:
                 args, kwargs = self.methods['get_probe_signals']
-                sig = m.get_probe_signals(*args, **kwargs)
+                signals = m.get_probe_signals(*args, **kwargs)
 
-                ax = sig.plot(out_folder)
-                if self.close_plots:
+                if not isinstance(signals, list):
+                    signals = [signals]
+
+                for sig in signals:
+                    ax = sig.plot(out_folder)
+                    axes += ax if isinstance(ax, list) else [ax]
+
+                    ax = sig.plot_2D(out_folder)
+                    axes += ax if isinstance(ax, list) else [ax]
+
+                    sig.save(out_folder)
+
+                    # Get signals FFT
+                    if 'get_probe_signals_fft' in self.methods:
+                        sig_fft = sig.fft()
+
+                        ax = sig_fft.plot(out_folder)
+                        axes += ax if isinstance(ax, list) else [ax]
+
+                        ax = sig_fft.plot_2D(out_folder)
+                        axes += ax if isinstance(ax, list) else [ax]
+
+                        sig_fft.save(out_folder)
+
+            # Close all figures
+            if self.close_plots:
+                for ax in axes:
                     fig = ax.get_figure()
                     plt.close(fig)
-
-                ax = sig.plot_2D(out_folder)
-                if self.close_plots:
-                    fig = ax.get_figure()
-                    plt.close(fig)
-
-                sig.save(out_folder)
-
-                # Get signals FFT
-                if 'get_probe_signals_fft' in self.methods:
-                    sig_fft = sig.fft()
-
-                    ax = sig_fft.plot(out_folder)
-                    if self.close_plots:
-                        fig = ax.get_figure()
-                        plt.close(fig)
-
-                    ax = sig_fft.plot_2D(out_folder)
-                    if self.close_plots:
-                        fig = ax.get_figure()
-                        plt.close(fig)
-
-                    sig_fft.save(out_folder)
 
     def delete(self) -> None:
         """
