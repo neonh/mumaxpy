@@ -72,7 +72,7 @@ class Grid:
 class Quantity:
     name: str
     unit: str
-    dimension: int
+    dimension: int = 1
     components: Optional[List[str]] = None
 
     def __post_init__(self) -> None:
@@ -140,7 +140,7 @@ class MatFileData(ABC):
     def load(cls, file: Path) -> 'MatFileData':
         mat_dict = loadmat(file)
 
-        title = mat_dict['title']
+        title = mat_dict['title'][0]
 
         time_struct = mat_dict['time'][0][0]
         time = Time(time_struct['values'][0],
@@ -410,8 +410,11 @@ class MatFileData(ABC):
     def _get_plot_filepath(self, save_path: Optional[str],
                            extension: str) -> str:
         if save_path is None:
-            file = os.path.join(self._folder,
-                                f'{self._filename}.{extension}')
+            if self._folder is not None:
+                file = os.path.join(self._folder,
+                                    f'{self._filename}.{extension}')
+            else:
+                file = None
         elif os.path.isdir(save_path):
             file = os.path.join(save_path, f'{self._filename}.{extension}')
         else:
@@ -441,6 +444,18 @@ class VectorData(MatFileData):
         extra: any extra data
         parameters: dict of parameters names and values from the filename
     """
+
+    @property
+    def x(self):
+        return self.get_component('x')
+
+    @property
+    def y(self):
+        return self.get_component('y')
+
+    @property
+    def z(self):
+        return self.get_component('z')
 
     def is_vector(self) -> bool:
         return True
@@ -500,6 +515,73 @@ class ScalarData(MatFileData):
         extra: any extra data
         parameters: dict of parameters names and values from the filename
     """
+
+    def __add__(self, other):
+        if isinstance(other, ScalarData):
+            conv = u.Unit(other.quantity.unit).to(self.quantity.unit)
+            data = self.data + other.data * conv
+            title = f'{self.title} + {other.title}'
+            q_name = f'{self.quantity.name}+{other.quantity.name}'
+        else:
+            q = u.Quantity(other).to(self.quantity.unit)
+            data = self.data + q.value
+            title = f'{self.title}+{other}'
+            q_name = f'{self.quantity.name}+{other}'
+        return ScalarData(self.time, self.grid,
+                          Quantity(q_name, self.quantity.unit), data, title,
+                          self.parameters, self.extra)
+
+    def __sub__(self, other):
+        if isinstance(other, ScalarData):
+            conv = u.Unit(other.quantity.unit).to(self.quantity.unit)
+            data = self.data - other.data * conv
+            title = f'{self.title} - {other.title}'
+            q_name = f'{self.quantity.name}-{other.quantity.name}'
+        else:
+            q = u.Quantity(other).to(self.quantity.unit)
+            data = self.data - q.value
+            title = f'{self.title} - {other}'
+            q_name = f'{self.quantity.name}-{other}'
+        return ScalarData(self.time, self.grid,
+                          Quantity(q_name, self.quantity.unit), data, title,
+                          self.parameters, self.extra)
+
+    def __mul__(self, other):
+        if isinstance(other, ScalarData):
+            data = self.data * other.data
+            title = f'{self.title} * {other.title}'
+            q_name = f'{self.quantity.name}*{other.quantity.name}'
+            q_unit = str(u.Unit(self.quantity.unit)
+                         * u.Unit(other.quantity.unit))
+        else:
+            q = u.Quantity(other)
+            data = self.data * q.value
+            title = f'{self.title} * {other}'
+            q_name = f'{self.quantity.name}*{other}'
+            q_unit = str(u.Unit(self.quantity.unit) * q.unit)
+        return ScalarData(self.time, self.grid,
+                          Quantity(q_name, q_unit), data, title,
+                          self.parameters, self.extra)
+
+    def __rmul__(self, other):
+        return self * other
+
+    def __truediv__(self, other):
+        if isinstance(other, ScalarData):
+            data = self.data / other.data
+            title = f'{self.title} / {other.title}'
+            q_name = f'{self.quantity.name}/{other.quantity.name}'
+            q_unit = str(u.Unit(self.quantity.unit)
+                         / u.Unit(other.quantity.unit))
+        else:
+            q = u.Quantity(other)
+            data = self.data / q.value
+            title = f'{self.title} / {other}'
+            q_name = f'{self.quantity.name}/{other}'
+            q_unit = str(u.Unit(self.quantity.unit) / q.unit)
+        return ScalarData(self.time, self.grid,
+                          Quantity(q_name, q_unit), data, title,
+                          self.parameters, self.extra)
 
     def is_vector(self) -> bool:
         return False
