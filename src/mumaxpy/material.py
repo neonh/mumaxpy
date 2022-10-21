@@ -10,13 +10,13 @@ from dataclasses import dataclass
 @dataclass
 class Material:
     alpha_Gilbert: u.Quantity = 0 * u.dimensionless_unscaled
-    A_ex:  u.Quantity = 0 * u.J / u.m
-    fourPiMs:  u.Quantity = 0 * u.erg / (u.G * u.cm**3)
-    Ku_1:  u.Quantity = 0 * u.erg / u.cm**3
-    Ku_2:  u.Quantity = 0 * u.erg / u.cm**3
-    Kc_1:  u.Quantity = 0 * u.erg / u.cm**3
-    Kc_2:  u.Quantity = 0 * u.erg / u.cm**3
-    Kc_3:  u.Quantity = 0 * u.erg / u.cm**3
+    A_ex: u.Quantity = 0 * u.J / u.m
+    fourPiMs: u.Quantity = 0 * u.erg / (u.G * u.cm**3)
+    Ku_1: u.Quantity = 0 * u.erg / u.cm**3
+    Ku_2: u.Quantity = 0 * u.erg / u.cm**3
+    Kc_1: u.Quantity = 0 * u.erg / u.cm**3
+    Kc_2: u.Quantity = 0 * u.erg / u.cm**3
+    Kc_3: u.Quantity = 0 * u.erg / u.cm**3
 
 
 # %% Functions

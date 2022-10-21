@@ -6,7 +6,7 @@ pathes:
 
     # Working directory for mumax3,
     # where cache and produced output are stored temporarily
-    mumax_output: .\output\mumax3
+    mumax_output: .\__output__\.mumax3_temp
 
     # Main directory for results
-    result_data: .\output\results
+    result_data: .\__output__\__results__

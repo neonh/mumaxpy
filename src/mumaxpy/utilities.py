@@ -1,12 +1,21 @@
 """
 Utilities
 """
+# %% Imports
 import os
+import glob
 import re
 import yaml
 import tkinter.filedialog
 import tkinter as tk
 from astropy import units as u
+from typing import Optional, List, Tuple, Dict, Union
+
+
+# %% Types
+# X, Y or Z
+Ax = str
+Path = str
 
 
 # %% Constants
@@ -15,7 +24,7 @@ FORBIDDEN_CHARS = OS_FORBIDDEN_CHARS + ';$#\'"`'
 
 
 # %% Functions
-def init(file):
+def init(file: Path) -> Tuple[Path, Path, Path]:
     # Open config file
     with open(file, encoding='utf8') as f:
         init_dict = yaml.safe_load(f)
@@ -27,11 +36,26 @@ def init(file):
     return template_folder, work_folder, data_folder
 
 
-def get_filename(path):
+def get_filename(path: Path) -> str:
     return os.path.splitext(os.path.basename(path))[0]
 
 
-def get_unit(param):
+def get_files_list(filename_mask: str,
+                   folder: Optional[Path] = None,
+                   recursive: bool = True) -> List[Path]:
+    if folder is None:
+        folder = choose_folder()
+
+    if recursive is True:
+        files = glob.glob(os.path.join(folder, '**', filename_mask),
+                          recursive=True)
+    else:
+        files = glob.glob(os.path.join(folder, filename_mask))
+
+    return files
+
+
+def get_unit(param: Union[u.Quantity, float]) -> str:
     if isinstance(param, u.Quantity):
         unit = param.unit
     else:
@@ -39,13 +63,13 @@ def get_unit(param):
     return unit
 
 
-def remove_forbidden_chars(s):
+def remove_forbidden_chars(s: str) -> str:
     out = ''.join(c for c in s
                   if (ord(c) >= 32) and (c not in FORBIDDEN_CHARS))
     return out
 
 
-def get_name_and_unit_from_str(s):
+def get_name_and_unit_from_str(s: str) -> Tuple[str, str]:
     """
     'Amp, urad' -> ('Amp', 'urad')
     'Amp (urad)' -> ('Amp', 'urad')
@@ -60,7 +84,7 @@ def get_name_and_unit_from_str(s):
     return (name, unit)
 
 
-def extract_parameters(s):
+def extract_parameters(s: str) -> Dict[str, Tuple[float, str]]:
     param_dict = {}
     m = re.findall(r'(\w*)=([\d|.]*)(\w*)?', s)
     for param, value, unit in m:
@@ -68,7 +92,7 @@ def extract_parameters(s):
     return param_dict
 
 
-def create_hidden_window():
+def create_hidden_window() -> tk.Tk:
     root = tk.Tk()
     root.attributes("-topmost", 1)
     root.overrideredirect(True)
@@ -77,7 +101,7 @@ def create_hidden_window():
     return root
 
 
-def choose_folder():
+def choose_folder() -> Path:
     root = create_hidden_window()
     # Open dialog
     folder = tk.filedialog.askdirectory(parent=root)
@@ -85,7 +109,10 @@ def choose_folder():
     return folder
 
 
-def msgbox(message, title='', icon='info', cancel_button=False):
+def msgbox(message: str,
+           title: str = '',
+           icon: str = 'info',
+           cancel_button: bool = False) -> bool:
     root = create_hidden_window()
     if cancel_button:
         messagebox = tk.messagebox.askokcancel

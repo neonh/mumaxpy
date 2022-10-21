@@ -2,6 +2,7 @@
 Simulation class
 """
 import os
+import re
 from datetime import datetime
 import matplotlib.pyplot as plt
 import shutil
@@ -51,7 +52,6 @@ class Simulation:
             self.data_dir = self.work_dir
 
         self.df = None
-        self.data_to_save = []
         self.table_columns_to_plot = []
 
         self.max_angle = None
@@ -69,20 +69,19 @@ class Simulation:
 
     def _check_max_angle(self, df):
         s = None
-        if self.max_angle is not None:
-            if MAX_ANGLE in df.columns:
-                m_angle = df[MAX_ANGLE]
-                maximum = max(m_angle)
-                print(f'MaxAngle={maximum:.6f} rad')
+        if self.max_angle is not None and MAX_ANGLE in df.columns:
+            m_angle = df[MAX_ANGLE]
+            maximum = max(m_angle)
+            print(f'MaxAngle={maximum:.6f} rad')
 
-                if maximum > self.max_angle:
-                    it_qty = len(df)
-                    th_it_qty = len(df[df[MAX_ANGLE] > self.max_angle])
-                    p = th_it_qty / it_qty
-                    s = ('WARNING! MaxAngle was > '
-                         + f'{self.max_angle:.2f} rad during {p:.1%} '
-                         + 'of simulation time.')
-                    print(s)
+            if maximum > self.max_angle:
+                it_qty = len(df)
+                th_it_qty = len(df[df[MAX_ANGLE] > self.max_angle])
+                p = th_it_qty / it_qty
+                s = ('WARNING! MaxAngle was > '
+                     + f'{self.max_angle:.2f} rad during {p:.1%} '
+                     + 'of simulation time.')
+                print(s)
         return s
 
     def _plot_table(self, df, output_dir, title='', fname=''):
@@ -144,15 +143,27 @@ class Simulation:
             sub_dirs_dict.update({name: sub_dir})
         return sub_dirs_dict
 
-    def _run_mumax(self, script_file, script):
+    def _run_mx3_script(self, script_file, script):
         with open(script_file, 'w') as f:
-            f.write(script)
+            f.write(script.text())
 
         # Run
         command = ['mumax3', '-cache', self.cache_dir, script_file]
         ret = subprocess.run(command, capture_output=True, text=True)
         if ret.returncode != 0:
-            raise RuntimeError(f'Mumax returned an error:\n{ret.stderr}')
+            out_str = f'Mumax returned an error:\n{ret.stderr}'
+
+            m = re.search(r'script line (\d+):', ret.stderr)
+            if m is not None:
+                err_line = int(m.group(1))
+                out_str += ('\n---' +
+                            f'\nCheck line {err_line} '
+                            f'in generated file {script_file}')
+
+                tmpl_err_line = err_line - script.get_parameter_lines_qty() - 1
+                if tmpl_err_line > 0:
+                    out_str += f'\nor line {tmpl_err_line} in template file'
+            raise RuntimeError(out_str)
 
     def set_max_angle(self, max_angle=None):
         self.max_angle = max_angle
@@ -165,9 +176,6 @@ class Simulation:
 
     def add_table_plot(self, columns):
         self.table_columns_to_plot += [columns]
-
-    def add_data_to_save(self, data, comp=ALL):
-        self.data_to_save += [(data, comp.lower())]
 
     def get_result_dir(self):
         return self.result_dir
@@ -239,7 +247,7 @@ class Simulation:
                 script.modify_parameter(v, var_value[i])
                 v_list += [script.get_parameter_str(v)]
             var_str = ', '.join(v_list)
-            if len(v_list) > 0:
+            if len(v_list) > 0 and v_list[0] != '':
                 fvar_str = '_{' + '}_{'.join(v_list).replace(' ', '') + '}'
             else:
                 fvar_str = ''
@@ -250,7 +258,7 @@ class Simulation:
 
             # Run
             print(f'#{iter_num:2} of {iter_qty} | {var_str}')
-            self._run_mumax(script_file, script.text())
+            self._run_mx3_script(script_file, script)
 
             time = datetime.now()
             duration_str = str(time - prev_time).split('.')[0]
@@ -279,10 +287,10 @@ class Simulation:
             shutil.move(table_file, table_copy_file)
 
             # %% Convert ovf files
-            for data, comp in self.data_to_save:
-                ovf_to_mat(output_dir, data, comp,
-                           output_dir=sub_dirs[MAT_FILES],
-                           filename=f'{data}{comp}{fvar_str}')
+            out_dir = os.path.join(sub_dirs[MAT_FILES], *v_list[:-1])
+            ovf_to_mat(input_dir=output_dir,
+                       output_dir=out_dir,
+                       filename_suffix=fvar_str)
 
             # %% Get table data
             table_df, table_units = self._get_table_data(table_copy_file)

@@ -178,6 +178,9 @@ class Script:
             s = ''
         return s
 
+    def get_parameter_lines_qty(self):
+        return self.parameters.get_param_str().count('\n')
+
     def text(self):
         if self.parameters is not None:
             param_str = self.parameters.get_param_str()
