@@ -1,9 +1,10 @@
 """
 Material class
 """
+# %% Imports
+from dataclasses import dataclass
 import yaml
 from astropy import units as u
-from dataclasses import dataclass
 
 
 # %% Classes

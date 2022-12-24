@@ -1,9 +1,10 @@
 """
 Variables class
 """
+# %% Imports
+from dataclasses import dataclass
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass
 
 
 # %% Classes

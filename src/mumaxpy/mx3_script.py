@@ -1,10 +1,11 @@
 """
 Script configuration classes
 """
+# %% Imports
 import re
 from astropy import units as u
-from .material import Material
-from .utilities import get_unit, get_filename
+from mumaxpy.material import Material
+from mumaxpy.utilities import get_unit, get_filename
 
 # Add Oersted unit
 if not hasattr(u, 'Oe'):

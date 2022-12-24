@@ -1,14 +1,16 @@
 """
 Processing OVF files
 """
+# %% Imports
 import glob
-import numpy as np
 import os
 import re
 import struct
-from scipy.io import savemat
-from .utilities import get_filename
 from typing import List, Dict, Tuple, Optional
+import numpy as np
+from scipy.io import savemat
+
+from mumaxpy.utilities import get_filename
 
 
 # %% Types

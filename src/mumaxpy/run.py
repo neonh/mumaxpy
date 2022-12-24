@@ -1,12 +1,14 @@
 """
 Run mumax
 """
+# %% Imports
 import os
 import shutil
 import glob
-import matplotlib.pyplot as plt
 from datetime import datetime
 from typing import Callable
+import matplotlib.pyplot as plt
+
 from mumaxpy import __version__
 from mumaxpy.simulation import Simulation
 from mumaxpy.variables import Variables

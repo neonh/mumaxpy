@@ -1,18 +1,20 @@
 """
 Process data from .mat file
 """
-import numpy as np
+# %% Imports
 import os
-import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
-from scipy.io import loadmat, savemat
-from astropy import units as u
 from dataclasses import dataclass
 from itertools import zip_longest
 from typing import List, Tuple, Dict, Iterable, Callable, Optional
-from .utilities import extract_parameters, get_filename
-from .signal import Signal
-from .plot import plot_2D, animate_2D
+import numpy as np
+from scipy.io import loadmat, savemat
+import matplotlib.pyplot as plt
+from astropy import units as u
+
+from mumaxpy.utilities import extract_parameters, get_filename
+from mumaxpy.signal import Signal
+from mumaxpy.plot import plot_2D, animate_2D
 
 
 # %% Types

@@ -3,9 +3,10 @@ Script for easy data processing
 """
 # %% Imports
 import os
+from typing import Optional
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import Optional
+
 from mumaxpy.utilities import get_filename, get_files_list
 from mumaxpy.mat_data import MatFileData
 

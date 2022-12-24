@@ -1,11 +1,12 @@
 """
 Plot functions
 """
+# %% Imports
+from typing import Tuple, Callable, Optional
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.widgets import Slider
-from typing import Tuple, Callable, Optional
 
 
 # %% Types
