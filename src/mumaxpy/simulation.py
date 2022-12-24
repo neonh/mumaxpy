@@ -1,16 +1,19 @@
 """
 Simulation class
 """
+# %% Imports
 import os
 import re
 from datetime import datetime
-import matplotlib.pyplot as plt
 import shutil
 import subprocess
 import numpy as np
 import pandas as pd
-from .ovf import ovf_to_mat
-from .utilities import get_name_and_unit_from_str, remove_forbidden_chars
+import matplotlib.pyplot as plt
+
+from mumaxpy.ovf import ovf_to_mat
+from mumaxpy.utilities import (get_name_and_unit_from_str,
+                               get_valid_dirname)
 
 
 # %% Config
@@ -124,7 +127,7 @@ class Simulation:
             sub_dir_name += f'_{comment}'
         result_dir = os.path.join(self.data_dir,
                                   script_name,
-                                  remove_forbidden_chars(sub_dir_name))
+                                  get_valid_dirname(sub_dir_name))
         if not os.path.exists(result_dir):
             os.makedirs(result_dir)
         return result_dir

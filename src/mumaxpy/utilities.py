@@ -5,11 +5,11 @@ Utilities
 import os
 import glob
 import re
-import yaml
 import tkinter.filedialog
 import tkinter as tk
-from astropy import units as u
 from typing import Optional, List, Tuple, Dict, Union
+import yaml
+from astropy import units as u
 
 
 # %% Types
@@ -66,6 +66,14 @@ def get_unit(param: Union[u.Quantity, float]) -> str:
 def remove_forbidden_chars(s: str) -> str:
     out = ''.join(c for c in s
                   if (ord(c) >= 32) and (c not in FORBIDDEN_CHARS))
+    return out
+
+
+def get_valid_dirname(s: str) -> str:
+    """ Remove forbidden chars, strip spaces and replace dot at the end """
+    out = remove_forbidden_chars(s).strip()
+    if out[-1] == '.':
+        out = out[:-1] + '!'
     return out
 
 
