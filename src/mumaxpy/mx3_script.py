@@ -5,7 +5,7 @@ Script configuration classes
 import re
 from astropy import units as u
 from mumaxpy.material import Material
-from mumaxpy.utilities import get_unit, get_filename
+from mumaxpy.utilities import get_unit, get_filename, number_to_str
 
 # Add Oersted unit
 if not hasattr(u, 'Oe'):
@@ -171,10 +171,10 @@ class Script:
             unit = ''
         return unit
 
-    def get_parameter_str(self, parameter):
+    def get_parameter_str(self, parameter, fmt=None):
         if parameter is not None:
             value = getattr(self.parameters, parameter)
-            s = f'{parameter}={value:.2f}'
+            s = f'{parameter}=' + number_to_str(value, fmt)
         else:
             s = ''
         return s

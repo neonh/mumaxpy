@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 
 from mumaxpy.ovf import ovf_to_mat
 from mumaxpy.utilities import (get_name_and_unit_from_str,
-                               get_valid_dirname)
+                               get_valid_dirname, number_to_str)
 
 
 # %% Config
@@ -248,7 +248,7 @@ class Simulation:
             v_list = []
             for i, v in enumerate(var_names):
                 script.modify_parameter(v, var_value[i])
-                v_list += [script.get_parameter_str(v)]
+                v_list += [script.get_parameter_str(v, variables.get(v).fmt)]
             var_str = ', '.join(v_list)
             if len(v_list) > 0 and v_list[0] != '':
                 fvar_str = '_{' + '}_{'.join(v_list).replace(' ', '') + '}'
@@ -372,7 +372,9 @@ class Simulation:
 
             # Split data by folders (\<var_name>=<var_value> <var_unit>\)
             for val in var_vals:
-                sub_dirs_list = [f'{x[0]}={x[1]:.2f} {x[2]}'
+                sub_dirs_list = [f'{x[0]}='
+                                 + number_to_str(x[1], variables.get(x[0]).fmt)
+                                 + f' {x[2]}'
                                  for x in zip(var_names[:-2],
                                               val, var_units[:-2])]
                 out_dir = os.path.join(sub_dirs[RESULTS], *sub_dirs_list)

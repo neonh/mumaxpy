@@ -6,12 +6,18 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from mumaxpy.utilities import NumberFormat, find_common_number_format
+
 
 # %% Classes
 @dataclass
 class Variable:
     name: str
     values: np.ndarray
+    fmt: NumberFormat = None
+
+    def __post_init__(self):
+        self.fmt = find_common_number_format(self.values)
 
     def __str__(self):
         s = f'{self.name}={self.values}'
@@ -24,6 +30,7 @@ class Variable:
 class Variables:
     def __init__(self):
         self._variables = []
+        self._idx_dict = {}
 
     def __str__(self):
         str_list = [str(v) for v in self._variables]
@@ -47,13 +54,21 @@ class Variables:
         return v
 
     def add(self, name, values):
+        if name in self._idx_dict:
+            raise RuntimeError(f'Variable {name} already added!')
+        self._idx_dict[name] = len(self._variables)
         self._variables += [Variable(name, np.array(values))]
 
-    def get(self):
-        return self._variables
+    def get(self, name=None):
+        if name is not None:
+            v = self._variables[self._idx_dict[name]]
+        else:
+            v = self._variables
+        return v
 
     def flush(self):
         self._variables = []
+        self._idx_dict = {}
 
     def get_df(self):
         var_list = self._variables
