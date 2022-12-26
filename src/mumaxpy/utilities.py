@@ -7,7 +7,8 @@ import glob
 import re
 import tkinter.filedialog
 import tkinter as tk
-from typing import Optional, List, Tuple, Dict, Union
+from dataclasses import dataclass
+from typing import Optional, List, Tuple, Dict, Union, Iterable
 import yaml
 from astropy import units as u
 
@@ -21,6 +22,16 @@ Path = str
 # %% Constants
 OS_FORBIDDEN_CHARS = r'<>:"/\|?*'
 FORBIDDEN_CHARS = OS_FORBIDDEN_CHARS + ';$#\'"`'
+
+
+# %% Classes
+@dataclass
+class NumberFormat:
+    width: int
+    precision: int
+    exponent: int = 0
+    sign: str = ''
+    fill: str = '0'
 
 
 # %% Functions
@@ -129,3 +140,84 @@ def msgbox(message: str,
     ans = messagebox(parent=root, message=message, title=title, icon=icon)
     root.destroy()
     return ans
+
+
+def find_common_number_format(numbers: Iterable[float]) -> NumberFormat:
+    """
+    Find suitable format to print all of the numbers to strings
+    of equal lengths and precisions
+    """
+    # Strings in scientific format
+    slist = [f'{x:e}' for x in numbers]
+
+    # Sign
+    sign = ''
+    # Integer part
+    d = []
+    # Fractional part
+    f = []
+    # Exponent
+    e = []
+    for s in slist:
+        m = re.search(r'(-)?(\d+)(?:\.(\d+))?(e[+|-]?\d+)?', s)
+        if m.group(1) is not None:
+            sign = '+'
+        d += [len(m.group(2))]
+        if m.group(3) is not None:
+            f += [len(m.group(3).rstrip('0'))]
+        else:
+            f += [0]
+        if m.group(4) is not None:
+            e += [int(m.group(4)[1:])]
+        else:
+            e += [0]
+
+    # Find common exponent if possible
+    min_e = min(e)
+    max_e = max(e)
+    if max_e - min_e > 6:
+        common_exp = None
+    else:
+        if max_e < 5 and min_e > -5:
+            common_exp = 0
+        else:
+            # Choose closest 3*N value
+            common_exp = (min_e // 3) * 3
+        d = [d[i] + (e[i] - common_exp) for i in range(len(d))]
+        f = [f[i] - (e[i] - common_exp) for i in range(len(f))]
+
+    int_len = max(d)
+    frac_len = max(f)
+    if frac_len < 0:
+        frac_len = 0
+
+    fmt = NumberFormat(sign=sign,
+                       width=len(sign) + int_len + frac_len + (frac_len > 0),
+                       precision=frac_len,
+                       exponent=common_exp)
+    return fmt
+
+
+def number_to_str(number: float, fmt: Optional[NumberFormat] = None) -> str:
+    """Print number using specified format"""
+    if fmt is None:
+        out = f'{number:g}'
+    else:
+        s = '+' if fmt.sign else ''
+        w = fmt.width
+        p = fmt.precision
+        e = fmt.exponent
+        f = fmt.fill
+
+        if e is None:
+            # Scientific format
+            out = f'{number:{f}={s}{w}.{p}e}'
+        elif e == 0:
+            # Float format
+            out = f'{number:{f}={s}{w}.{p}f}'
+        else:
+            # Scientific format with fixed exponent value
+            n = number / 10**fmt.exp
+            out = f'{n:{f}={s}{w}.{p}f}e{e:+d}'
+
+    return out
