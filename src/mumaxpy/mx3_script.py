@@ -108,6 +108,9 @@ class Parameters:
         s = '\n'.join(param_list) + '\n'
         return s
 
+    def get_param_dict(self):
+        return {name: str(val) for name, val in vars(self).items()}
+
     def __str__(self):
         s = ''
         for name, val in vars(self).items():

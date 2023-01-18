@@ -293,7 +293,8 @@ class Simulation:
             out_dir = os.path.join(sub_dirs[MAT_FILES], *v_list[:-1])
             ovf_to_mat(input_dir=output_dir,
                        output_dir=out_dir,
-                       filename_suffix=fvar_str)
+                       filename_suffix=fvar_str,
+                       extra_data=script.parameters.get_param_dict())
 
             # %% Get table data
             table_df, table_units = self._get_table_data(table_copy_file)

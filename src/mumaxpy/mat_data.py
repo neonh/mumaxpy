@@ -179,10 +179,17 @@ class MatFileData(ABC):
 
         parameters_dict = extract_parameters(get_filename(file))
 
-        extra_struct = mat_dict['extra'][0][0] if 'extra' in mat_dict else None
+        if 'extra' in mat_dict:
+            # Convert structured numpy array to dict
+            extra_st = mat_dict['extra'][0][0]
+            extra_dict = {key: str(val[0])
+                          for key, val in zip(extra_st.dtype.names,
+                                              extra_st)}
+        else:
+            extra_dict = None
 
         obj = subclass(time, grid, quantity, data, title,
-                       parameters_dict, extra_struct, file)
+                       parameters_dict, extra_dict, file)
         return obj
 
     def save(self, file: Optional[Path] = None) -> None:
