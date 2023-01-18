@@ -488,6 +488,13 @@ class VectorData(MatFileData):
             raise RuntimeError(err)
         return obj
 
+    def plot(self, *args, **kwargs) -> List[plt.Axes]:
+        axes = []
+        for c in self.quantity.components:
+            scalar = self.get_component(c)
+            axes += [scalar.plot(*args, **kwargs)]
+        return axes
+
     def plot_amplitude(self, *args, **kwargs) -> List[plt.Axes]:
         axes = []
         for c in self.quantity.components:
@@ -598,6 +605,34 @@ class ScalarData(MatFileData):
     def get_component(self, component: Ax) -> 'ScalarData':
         # Ignore component
         return self
+
+    def plot(self, time_index: int,
+             normal: Ax = Z,
+             layer_index: Optional[int] = None,
+             cmap: str = 'bwr',
+             vmin: Optional[float] = None,
+             vmax: Optional[float] = None,
+             *,
+             add_plot_func: Optional[Callable] = None,
+             save_path: Optional[Path] = None,
+             extension: str = 'png') -> plt.Axes:
+        title = self._get_plot_title(normal, layer_index)
+        file = self._get_plot_filepath(save_path, extension)
+        axes = [ax for ax in XYZ if ax != normal]
+        axes_data = [self.get_axis_data(ax, mesh=True) for ax in axes]
+
+        data = self.get_planar_data(normal, layer_index)
+        data = np.take(data, time_index, axis=AX_NUM[T])
+
+        ax = plot_2D(axes_data[0], axes_data[1], data,
+                     xlabel=f'{axes[0]}, {self.grid.unit}',
+                     ylabel=f'{axes[1]}, {self.grid.unit}',
+                     title=title,
+                     cmap=cmap,
+                     vmin=vmin, vmax=vmax,
+                     add_plot_func=add_plot_func,
+                     file=file)
+        return ax
 
     def plot_amplitude(self, normal: Ax = Z,
                        layer_index: Optional[int] = None,
