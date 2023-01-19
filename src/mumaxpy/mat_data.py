@@ -270,6 +270,9 @@ class MatFileData(ABC):
     def get_shape(self) -> Tuple:
         return self.data.shape
 
+    def get_grid_size(self) -> np.ndarray:
+        return self.grid.size
+
     def get_time_data(self, mesh: bool = False) -> np.ndarray:
         """ Return time values
             If mesh is False
