@@ -9,6 +9,7 @@ import tkinter.filedialog
 import tkinter as tk
 from dataclasses import dataclass
 from typing import Optional, List, Tuple, Dict, Union, Iterable
+import pandas as pd
 import yaml
 from astropy import units as u
 
@@ -109,6 +110,34 @@ def extract_parameters(s: str) -> Dict[str, Tuple[float, str]]:
     for param, value, unit in m:
         param_dict[param] = (float(value), unit)
     return param_dict
+
+
+def read_dat_file(file: Path) -> Tuple[pd.DataFrame, Dict[str, str]]:
+    """ Read dataframe and units from dat-file """
+    with open(file) as f:
+        # First row - variable names
+        header = f.readline().split()
+        # Second row - units
+        units = f.readline().split()
+        # Third row (optional) - comments, contains values for second index
+        comments = f.readline().split('=')
+
+    units_dict = {key: val for key, val in zip(header, units)}
+
+    if len(comments) > 1:
+        subheader_name_str = comments[0].strip()
+        sh_name, sh_unit = get_name_and_unit_from_str(subheader_name_str)
+        # Add to units dict
+        units_dict[sh_name] = sh_unit
+        # Subheader index values
+        subheader = [float(x) for x in comments[1].split()]
+        df = pd.read_csv(file, sep='\t', header=[0], skiprows=[1, 2],
+                         index_col=0)
+        df.columns = pd.MultiIndex.from_arrays([header[1:], subheader],
+                                               names=('', sh_name))
+    else:
+        df = pd.read_csv(file, sep='\t', header=0, skiprows=[1])
+    return df, units_dict
 
 
 def create_hidden_window() -> tk.Tk:
