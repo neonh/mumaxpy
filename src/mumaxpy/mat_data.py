@@ -6,7 +6,7 @@ import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from itertools import zip_longest
-from typing import List, Tuple, Dict, Iterable, Callable, Optional
+from typing import List, Tuple, Dict, Iterable, Callable, Union, Optional
 import numpy as np
 from scipy.io import loadmat, savemat
 import matplotlib.pyplot as plt
@@ -259,8 +259,6 @@ class MatFileData(ABC):
             self.grid.step *= multiplier
             self.grid.coord *= multiplier
 
-    # TODO
-    # def apply(self, func):
     def convert_quantity(self,
                          convert_func:
                              Callable[[Tuple[np.ndarray, Quantity]],
@@ -459,15 +457,38 @@ class VectorData(MatFileData):
 
     @property
     def x(self):
-        return self.get_component('x')
+        return self.get_component(X)
 
     @property
     def y(self):
-        return self.get_component('y')
+        return self.get_component(Y)
 
     @property
     def z(self):
-        return self.get_component('z')
+        return self.get_component(Z)
+
+    def apply(self, func: Callable[[float, ...], float],
+              components: Tuple[str] = ('x', 'y', 'z'),
+              quantity_name: Optional[str] = None,
+              unit: Optional[str] = None) -> 'ScalarData':
+        """ Apply function to all data values
+
+        Used vector components specified in components argument
+        Function should have number of arguments equal to len(components)
+        Returns: ScalarData
+        """
+        data_list = [self.get_data(ax) for ax in components]
+        data = np.vectorize(func)(*data_list)
+        q_unit = self.quantity.unit if unit is None else unit
+        if quantity_name is None:
+            q_name = self.quantity.name
+            title = self.title
+        else:
+            q_name = quantity_name
+            title = f'{quantity_name}_{self.title}'
+        return ScalarData(self.time, self.grid,
+                          Quantity(q_name, q_unit), data, title,
+                          self.parameters, self.extra)
 
     def is_vector(self) -> bool:
         return True
@@ -540,7 +561,7 @@ class ScalarData(MatFileData):
         parameters: dict of parameters names and values from the filename
     """
 
-    def __add__(self, other):
+    def __add__(self, other: Union[float, 'ScalarData']) -> 'ScalarData':
         if isinstance(other, ScalarData):
             conv = u.Unit(other.quantity.unit).to(self.quantity.unit)
             data = self.data + other.data * conv
@@ -555,7 +576,7 @@ class ScalarData(MatFileData):
                           Quantity(q_name, self.quantity.unit), data, title,
                           self.parameters, self.extra)
 
-    def __sub__(self, other):
+    def __sub__(self, other: Union[float, 'ScalarData']) -> 'ScalarData':
         if isinstance(other, ScalarData):
             conv = u.Unit(other.quantity.unit).to(self.quantity.unit)
             data = self.data - other.data * conv
@@ -570,7 +591,7 @@ class ScalarData(MatFileData):
                           Quantity(q_name, self.quantity.unit), data, title,
                           self.parameters, self.extra)
 
-    def __mul__(self, other):
+    def __mul__(self, other: Union[float, 'ScalarData']) -> 'ScalarData':
         if isinstance(other, ScalarData):
             data = self.data * other.data
             title = f'{self.title} * {other.title}'
@@ -587,10 +608,10 @@ class ScalarData(MatFileData):
                           Quantity(q_name, q_unit), data, title,
                           self.parameters, self.extra)
 
-    def __rmul__(self, other):
+    def __rmul__(self, other: Union[float, 'ScalarData']) -> 'ScalarData':
         return self * other
 
-    def __truediv__(self, other):
+    def __truediv__(self, other: Union[float, 'ScalarData']) -> 'ScalarData':
         if isinstance(other, ScalarData):
             data = self.data / other.data
             title = f'{self.title} / {other.title}'
@@ -603,6 +624,22 @@ class ScalarData(MatFileData):
             title = f'{self.title} / {other}'
             q_name = f'{self.quantity.name}/{other}'
             q_unit = str(u.Unit(self.quantity.unit) / q.unit)
+        return ScalarData(self.time, self.grid,
+                          Quantity(q_name, q_unit), data, title,
+                          self.parameters, self.extra)
+
+    def apply(self, func: Callable[[float], float],
+              quantity_name: Optional[str] = None,
+              unit: Optional[str] = None) -> 'ScalarData':
+        """ Apply function to all data values """
+        data = np.vectorize(func)(self.data)
+        q_unit = self.quantity.unit if unit is None else unit
+        if quantity_name is None:
+            q_name = self.quantity.name
+            title = self.title
+        else:
+            q_name = quantity_name
+            title = f'{quantity_name}_{self.title}'
         return ScalarData(self.time, self.grid,
                           Quantity(q_name, q_unit), data, title,
                           self.parameters, self.extra)
