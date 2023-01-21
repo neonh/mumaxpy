@@ -14,7 +14,7 @@ from astropy import units as u
 
 from mumaxpy.utilities import extract_parameters, get_filename
 from mumaxpy.signal import Signal
-from mumaxpy.plot import plot_2D, animate_2D
+from mumaxpy.plot import plot_2D, plot_3D, animate_2D
 
 
 # %% Types
@@ -403,7 +403,7 @@ class MatFileData(ABC):
             self.grid.nodes[i] = len(c)
             self.grid.coord[i] = c[0] - self.grid.step[i]/2
 
-    def _get_plot_title(self, normal: Ax,
+    def _get_plot_title(self, normal: Optional[Ax] = None,
                         layer_index: Optional[int] = None) -> str:
         title = f'{self.quantity}'
 
@@ -496,6 +496,13 @@ class VectorData(MatFileData):
         for c in self.quantity.components:
             scalar = self.get_component(c)
             axes += [scalar.plot(*args, **kwargs)]
+        return axes
+
+    def plot_volume(self, *args, **kwargs) -> List[plt.Axes]:
+        axes = []
+        for c in self.quantity.components:
+            scalar = self.get_component(c)
+            axes += [scalar.plot_volume(*args, **kwargs)]
         return axes
 
     def plot_amplitude(self, *args, **kwargs) -> List[plt.Axes]:
@@ -634,6 +641,25 @@ class ScalarData(MatFileData):
                      cmap=cmap,
                      vmin=vmin, vmax=vmax,
                      add_plot_func=add_plot_func,
+                     file=file)
+        return ax
+
+    def plot_volume(self, time_index: int,
+                    *,
+                    save_path: Optional[Path] = None,
+                    extension: str = 'png') -> plt.Axes:
+        title = self._get_plot_title()
+        file = self._get_plot_filepath(save_path, extension)
+        axes = list(XYZ.keys())
+        axes_data = [self.get_axis_data(ax, mesh=True) for ax in axes]
+
+        data = np.take(self.data, time_index, axis=AX_NUM[T])
+
+        ax = plot_3D(axes_data[0], axes_data[1], axes_data[2], data,
+                     xlabel=f'{axes[0]}, {self.grid.unit}',
+                     ylabel=f'{axes[1]}, {self.grid.unit}',
+                     zlabel=f'{axes[2]}, {self.grid.unit}',
+                     title=title,
                      file=file)
         return ax
 

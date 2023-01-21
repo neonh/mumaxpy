@@ -49,8 +49,8 @@ def plot_2D(x: np.ndarray, y: np.ndarray, data: np.ndarray,
             add_plot_func: Optional[Callable] = None,
             file: Path = None) -> plt.Axes:
     fig, ax = plt.subplots(figsize=get_fig_size(x, y))
-    xm, ym = np.meshgrid(x, y)
-    im = ax.pcolormesh(xm, ym, np.transpose(data),
+    xm, ym = np.meshgrid(x, y, indexing='ij')
+    im = ax.pcolormesh(xm, ym, data,
                        cmap=cmap,
                        vmin=vmin, vmax=vmax,
                        shading='auto')
@@ -62,6 +62,27 @@ def plot_2D(x: np.ndarray, y: np.ndarray, data: np.ndarray,
 
     if add_plot_func is not None:
         add_plot_func(ax)
+
+    fig.tight_layout()
+
+    if file is not None:
+        fig.savefig(file)
+
+    return ax
+
+
+def plot_3D(x: np.ndarray, y: np.ndarray, z: np.ndarray, data: np.ndarray,
+            xlabel: str = '', ylabel: str = '', zlabel: str = '',
+            title: str = '',
+            file: Path = None) -> plt.Axes:
+    fig = plt.figure()
+    ax = fig.add_subplot(projection='3d')
+    xm, ym, zm = np.meshgrid(x, y, z, indexing='ij')
+    ax.voxels(xm, ym, zm, data)
+    ax.set_title(title)
+    ax.set_xlabel(xlabel, fontsize=FONTSIZE)
+    ax.set_ylabel(ylabel, fontsize=FONTSIZE)
+    ax.set_zlabel(zlabel, fontsize=FONTSIZE)
 
     fig.tight_layout()
 
@@ -88,8 +109,8 @@ def animate_2D(time: np.ndarray, time_unit: str,
     fig, (ax, axtime) = plt.subplots(nrows=2, figsize=get_fig_size(x, y),
                                      gridspec_kw={'height_ratios':
                                                   [1-H_SLIDER, H_SLIDER]})
-    xm, ym = np.meshgrid(x, y)
-    im = ax.pcolormesh(xm, ym, np.transpose(data[0]),
+    xm, ym = np.meshgrid(x, y, indexing='ij')
+    im = ax.pcolormesh(xm, ym, data[0],
                        cmap=cmap,
                        vmin=vmin, vmax=vmax,
                        shading='auto')
@@ -111,7 +132,7 @@ def animate_2D(time: np.ndarray, time_unit: str,
     def update(val):
         # ax.set_title(f'{title} [t = {time[i]:.2f} {time_unit}]')
         i = np.searchsorted(time, slider.val, side='left')
-        im.set_array(np.transpose(data[i]).flatten())
+        im.set_array(data[i].flatten())
         fig.canvas.draw()
 
     slider.on_changed(update)
