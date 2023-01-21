@@ -7,6 +7,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.widgets import Slider
+from plotly.offline import plot
+import plotly.graph_objects as go
 
 
 # %% Types
@@ -74,22 +76,27 @@ def plot_2D(x: np.ndarray, y: np.ndarray, data: np.ndarray,
 def plot_3D(x: np.ndarray, y: np.ndarray, z: np.ndarray, data: np.ndarray,
             xlabel: str = '', ylabel: str = '', zlabel: str = '',
             title: str = '',
-            file: Path = None) -> plt.Axes:
-    fig = plt.figure()
-    ax = fig.add_subplot(projection='3d')
+            cmap: str = 'Plasma',
+            opacity: float = 0.5,
+            file: Path = None) -> None:
     xm, ym, zm = np.meshgrid(x, y, z, indexing='ij')
-    ax.voxels(xm, ym, zm, data)
-    ax.set_title(title)
-    ax.set_xlabel(xlabel, fontsize=FONTSIZE)
-    ax.set_ylabel(ylabel, fontsize=FONTSIZE)
-    ax.set_zlabel(zlabel, fontsize=FONTSIZE)
-
-    fig.tight_layout()
+    fig = go.Figure(data=go.Volume(x=xm.flatten(),
+                                   y=ym.flatten(),
+                                   z=zm.flatten(),
+                                   value=data.flatten(),
+                                   opacity=opacity,
+                                   colorscale=cmap))
+    fig.update_layout(title=title,
+                      scene=dict(xaxis=dict(title=xlabel),
+                                 yaxis=dict(title=ylabel),
+                                 zaxis=dict(title=zlabel)),
+                      scene_aspectmode='data')
+    fig.update_layout(autosize=True)
 
     if file is not None:
-        fig.savefig(file)
-
-    return ax
+        plot(fig, filename=file)
+    else:
+        plot(fig)
 
 
 def animate_2D(time: np.ndarray, time_unit: str,

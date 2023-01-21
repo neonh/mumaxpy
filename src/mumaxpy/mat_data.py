@@ -498,12 +498,10 @@ class VectorData(MatFileData):
             axes += [scalar.plot(*args, **kwargs)]
         return axes
 
-    def plot_volume(self, *args, **kwargs) -> List[plt.Axes]:
-        axes = []
+    def plot_volume(self, *args, **kwargs) -> None:
         for c in self.quantity.components:
             scalar = self.get_component(c)
-            axes += [scalar.plot_volume(*args, **kwargs)]
-        return axes
+            scalar.plot_volume(*args, **kwargs)
 
     def plot_amplitude(self, *args, **kwargs) -> List[plt.Axes]:
         axes = []
@@ -645,23 +643,26 @@ class ScalarData(MatFileData):
         return ax
 
     def plot_volume(self, time_index: int,
+                    cmap: str = 'Plasma',
+                    opacity: float = 0.5,
                     *,
-                    save_path: Optional[Path] = None,
-                    extension: str = 'png') -> plt.Axes:
+                    save_path: Optional[Path] = None) -> None:
         title = self._get_plot_title()
-        file = self._get_plot_filepath(save_path, extension)
+        file = self._get_plot_filepath(save_path, 'html')
         axes = list(XYZ.keys())
-        axes_data = [self.get_axis_data(ax, mesh=True) for ax in axes]
+        axes_data = [self.get_axis_data(ax, mesh=False) for ax in axes]
 
         data = np.take(self.data, time_index, axis=AX_NUM[T])
 
-        ax = plot_3D(axes_data[0], axes_data[1], axes_data[2], data,
-                     xlabel=f'{axes[0]}, {self.grid.unit}',
-                     ylabel=f'{axes[1]}, {self.grid.unit}',
-                     zlabel=f'{axes[2]}, {self.grid.unit}',
-                     title=title,
-                     file=file)
-        return ax
+        plot_3D(axes_data[0], axes_data[1], axes_data[2], data,
+                xlabel=f'{axes[0]}, {self.grid.unit}',
+                ylabel=f'{axes[1]}, {self.grid.unit}',
+                zlabel=f'{axes[2]}, {self.grid.unit}',
+                title=title,
+                cmap=cmap,
+                opacity=opacity,
+                file=file)
+        return None
 
     def plot_amplitude(self, normal: Ax = Z,
                        layer_index: Optional[int] = None,
