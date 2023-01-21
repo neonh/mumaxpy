@@ -13,6 +13,7 @@ from mumaxpy import __version__
 from mumaxpy.simulation import Simulation
 from mumaxpy.variables import Variables
 from mumaxpy.mx3_script import Parameters, Script
+from mumaxpy.mat_data import MatFileData
 from mumaxpy.utilities import init, msgbox
 
 
@@ -32,7 +33,8 @@ def run(template_filename: str,
         add_output: Callable = None,
         verify: Callable = None,
         post_processing: Callable = None,
-        comment: str = '') -> str:
+        comment: str = '',
+        plot_geom: bool = True) -> str:
     """
     Configure and run mumax simulations
     """
@@ -94,6 +96,13 @@ def run(template_filename: str,
     sim.set_callbacks(pre_run, post_run)
     sim.set_process_func(data_process_func)
     sim.set_max_angle(MAX_ANGLE_THRESHOLD)
+
+    # Plot geometry view
+    if plot_geom:
+        geom_dir = sim.run_geometry_test(script)
+        m = MatFileData.load(os.path.join(geom_dir, 'geom.mat'))
+        m.convert_units(space_unit=str(parameters.gridSize_x.unit))
+        m.plot_volume(save_path=geom_dir)
 
     # Configure data
     if add_output is not None:

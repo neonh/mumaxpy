@@ -651,7 +651,7 @@ class ScalarData(MatFileData):
         # Ignore component
         return self
 
-    def plot(self, time_index: int,
+    def plot(self, time_index: int = 0,
              normal: Ax = Z,
              layer_index: Optional[int] = None,
              cmap: str = 'bwr',
@@ -679,7 +679,7 @@ class ScalarData(MatFileData):
                      file=file)
         return ax
 
-    def plot_volume(self, time_index: int,
+    def plot_volume(self, time_index: int = 0,
                     cmap: str = 'Plasma',
                     opacity: float = 0.5,
                     *,

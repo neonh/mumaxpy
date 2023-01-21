@@ -146,12 +146,12 @@ class Simulation:
             sub_dirs_dict.update({name: sub_dir})
         return sub_dirs_dict
 
-    def _run_mx3_script(self, script_file, script):
-        with open(script_file, 'w') as f:
-            f.write(script.text())
+    def _run_mx3_script(self, file, script, param_lines_qty = 0):
+        with open(file, 'w') as f:
+            f.write(script)
 
         # Run
-        command = ['mumax3', '-cache', self.cache_dir, script_file]
+        command = ['mumax3', '-cache', self.cache_dir, file]
         ret = subprocess.run(command, capture_output=True, text=True)
         if ret.returncode != 0:
             out_str = f'Mumax returned an error:\n{ret.stderr}'
@@ -161,9 +161,9 @@ class Simulation:
                 err_line = int(m.group(1))
                 out_str += ('\n---' +
                             f'\nCheck line {err_line} '
-                            f'in generated file {script_file}')
+                            f'in generated file {file}')
 
-                tmpl_err_line = err_line - script.get_parameter_lines_qty() - 1
+                tmpl_err_line = err_line - param_lines_qty - 1
                 if tmpl_err_line > 0:
                     out_str += f'\nor line {tmpl_err_line} in template file'
             raise RuntimeError(out_str)
@@ -200,6 +200,21 @@ class Simulation:
 
     def get_result_data(self):
         return self.df
+
+    def run_geometry_test(self, script):
+        output_dir = os.path.join(self.work_dir, f'{script.name}.out')
+        script_file = os.path.join(self.work_dir, f'{script.name}.mx3')
+
+        if self.callbacks[PRE] is not None:
+            script.parameters = self.callbacks[PRE](script.parameters)
+        # Run test geom script
+        self._run_mx3_script(script_file,
+                             script.geom_test_text(),
+                             script.get_parameter_lines_qty())
+        # Convert to mat-file
+        ovf_to_mat(input_dir=output_dir)
+
+        return output_dir
 
     def run(self, script, variables=None, comment=''):
         output_dir = os.path.join(self.work_dir, f'{script.name}.out')
@@ -261,7 +276,9 @@ class Simulation:
 
             # Run
             print(f'#{iter_num:2} of {iter_qty} | {var_str}')
-            self._run_mx3_script(script_file, script)
+            self._run_mx3_script(script_file,
+                                 script.text(),
+                                 script.get_parameter_lines_qty())
 
             time = datetime.now()
             duration_str = str(time - prev_time).split('.')[0]

@@ -193,6 +193,21 @@ class Script:
         text = '\n'.join([param_str, self.script])
         return text
 
+    def geom_test_text(self):
+        """ Returns first part of script - up to SetGeom function
+        and insert Save(geom) to save geometry file """
+        if self.parameters is not None:
+            param_str = self.parameters.get_param_str()
+        else:
+            param_str = ''
+
+        script = self.script
+        m = re.search(r'setgeom\(.*\)', self.script, re.IGNORECASE)
+        script = self.script[:m.end()]
+        script += '\nSave(geom)\n'
+        text = '\n'.join([param_str, script])
+        return text
+
     def save(self, file):
         pass
 
