@@ -225,7 +225,7 @@ class Simulation:
         table_file = os.path.join(output_dir, 'table.txt')
 
         var_vals_str = ''
-        if variables is not None:
+        if variables is not None and len(variables) > 0:
             # Dataframe with variables multiindex
             df = variables.get_df()
             var_names = df.index.names
@@ -326,7 +326,7 @@ class Simulation:
                              fname=fvar_str)
 
             # %% Process table data
-            if self.process_func is not None:
+            if self.process_func is not None and var_qty > 0:
                 res_dict = self.process_func(table_df, table_units,
                                              script.parameters)
 
@@ -370,9 +370,9 @@ class Simulation:
         # %% Plot and save all graphs
         if var_qty > 0:
             self._plot_results(df, sub_dirs[RESULTS])
-        # Save current data plot
-        fig.tight_layout()
-        fig.savefig(os.path.join(self.result_dir, 'data.png'))
+            # Save current data plot
+            fig.tight_layout()
+            fig.savefig(os.path.join(self.result_dir, 'data.png'))
 
         # %% Save results data organized into folders
         if var_qty > 1:
