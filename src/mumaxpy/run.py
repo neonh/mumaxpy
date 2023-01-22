@@ -4,6 +4,7 @@ Run mumax
 # %% Imports
 import os
 import shutil
+import traceback
 import glob
 from datetime import datetime
 from typing import Callable
@@ -38,19 +39,6 @@ def run(template_filename: str,
     """
     Configure and run mumax simulations
     """
-    def _copy_scripts():
-        scripts_dir = sim.get_scripts_dir()
-        # Copy template and this script to results folder
-        shutil.copy2(main_script_file, scripts_dir)
-        shutil.copy2(template_file, scripts_dir)
-        yml_files = glob.glob(os.path.join(cur_dir, '*.yml'))
-        for f in yml_files:
-            shutil.copy2(f, scripts_dir)
-        # Save empty file with version in its filename
-        version_file = os.path.join(scripts_dir,
-                                    f'mumaxpy-{__version__}.version')
-        open(version_file, 'w+').close()
-
     # Current directory
     cur_dir = os.path.dirname(main_script_file)
     # Get directories
@@ -119,33 +107,47 @@ def run(template_filename: str,
         try:
             # Run simulation using selected variables and script configuration
             result_dir = sim.run(script, variables, comment=comment)
-
-            # Print errors
-            print(sim.get_errors_str())
-
-            _copy_scripts()
-
-            if post_processing is not None:
-                print('>>>> Running post_processing function...')
-                start_time = datetime.now()
-
-                # Do postprocessing
-                post_processing(result_dir, parameters)
-
-                finish_time = datetime.now()
-                print('<<<< Post-processing completed')
-                print(f'Elapsed time: {finish_time - start_time}')
-
         except KeyboardInterrupt as e:
             print(e, '\nTerminated by user!')
             result_dir = sim.get_result_dir()
-            if result_dir is not None:
-                _copy_scripts()
-
         except Exception as e:
             err_msg = f'{type(e).__name__}: {e}'
-            msgbox(message=err_msg, title='Error', icon='error')
+            msgbox(message=err_msg, title='Simulation error', icon='error')
             raise
+
+        # Print errors
+        print(sim.get_errors_str())
+
+        if result_dir is not None:
+            scripts_dir = sim.get_scripts_dir()
+            # Copy template and this script to results folder
+            shutil.copy2(main_script_file, scripts_dir)
+            shutil.copy2(template_file, scripts_dir)
+            yml_files = glob.glob(os.path.join(cur_dir, '*.yml'))
+            for f in yml_files:
+                shutil.copy2(f, scripts_dir)
+            # Save empty file with version in its filename
+            version_file = os.path.join(scripts_dir,
+                                        f'mumaxpy-{__version__}.version')
+            open(version_file, 'w+').close()
+
+        if post_processing is not None:
+            print('>>>> Running post_processing function...')
+            start_time = datetime.now()
+
+            try:
+                # Do postprocessing
+                post_processing(result_dir, parameters)
+                print('<<<< Post-processing completed')
+            except Exception as e:
+                err_msg = f'{type(e).__name__}: {e}'
+                msgbox(message=err_msg,
+                       title='Post-processing error', icon='error')
+                print(traceback.format_exc())
+                print('<<<< Post-processing FAILED')
+
+            finish_time = datetime.now()
+            print(f'Elapsed time: {finish_time - start_time}')
 
         # Don't close the plots
         plt.show()
