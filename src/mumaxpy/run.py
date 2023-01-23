@@ -87,7 +87,7 @@ def run(template_filename: str,
 
     # Plot geometry view
     if plot_geom:
-        geom_dir = sim.run_geometry_test(script)
+        geom_dir = sim.run_geometry_test(script, variables)
         m = MatFileData.load(os.path.join(geom_dir, 'geom.mat'))
         m.convert_units(space_unit=str(parameters.gridSize_x.unit))
         m.plot_volume(save_path=geom_dir)

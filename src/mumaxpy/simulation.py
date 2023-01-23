@@ -201,12 +201,19 @@ class Simulation:
     def get_result_data(self):
         return self.df
 
-    def run_geometry_test(self, script):
+    def run_geometry_test(self, script, variables=None):
         output_dir = os.path.join(self.work_dir, f'{script.name}.out')
         script_file = os.path.join(self.work_dir, f'{script.name}.mx3')
 
+        # Set first value for all variables
+        if variables is not None and len(variables) > 0:
+            v = variables.get_df().index
+            for name, val in zip(v.names, v[0]):
+                script.modify_parameter(name, val)
+        # Run PRE callback
         if self.callbacks[PRE] is not None:
             script.parameters = self.callbacks[PRE](script.parameters)
+
         # Run test geom script
         self._run_mx3_script(script_file,
                              script.geom_test_text(),
