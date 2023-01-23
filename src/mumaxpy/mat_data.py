@@ -682,6 +682,7 @@ class ScalarData(MatFileData):
     def plot_volume(self, time_index: int = 0,
                     cmap: str = 'Plasma',
                     opacity: float = 0.5,
+                    surf_count: int = 3,
                     *,
                     save_path: Optional[Path] = None) -> None:
         title = self._get_plot_title()
@@ -698,6 +699,7 @@ class ScalarData(MatFileData):
                 title=title,
                 cmap=cmap,
                 opacity=opacity,
+                surf_count=surf_count,
                 file=file)
         return None
 

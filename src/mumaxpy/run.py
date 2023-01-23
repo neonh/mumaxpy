@@ -90,7 +90,7 @@ def run(template_filename: str,
         geom_dir = sim.run_geometry_test(script, variables)
         m = MatFileData.load(os.path.join(geom_dir, 'geom.mat'))
         m.convert_units(space_unit=str(parameters.gridSize_x.unit))
-        m.plot_volume(save_path=geom_dir)
+        m.plot_volume(opacity=0.5, surf_count=3, save_path=geom_dir)
 
     # Configure data
     if add_output is not None:

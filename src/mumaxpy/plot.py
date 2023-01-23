@@ -78,6 +78,7 @@ def plot_3D(x: np.ndarray, y: np.ndarray, z: np.ndarray, data: np.ndarray,
             title: str = '',
             cmap: str = 'Plasma',
             opacity: float = 0.5,
+            surf_count: int = 3,
             file: Path = None) -> None:
     xm, ym, zm = np.meshgrid(x, y, z, indexing='ij')
     fig = go.Figure(data=go.Volume(x=xm.flatten(),
@@ -85,7 +86,9 @@ def plot_3D(x: np.ndarray, y: np.ndarray, z: np.ndarray, data: np.ndarray,
                                    z=zm.flatten(),
                                    value=data.flatten(),
                                    opacity=opacity,
-                                   colorscale=cmap))
+                                   colorscale=cmap,
+                                   surface_count=surf_count,
+                                   ))
     fig.update_layout(title=title,
                       scene=dict(xaxis=dict(title=xlabel),
                                  yaxis=dict(title=ylabel),
