@@ -157,10 +157,11 @@ def ovf_to_mat(input_dir: Path,
     ovf_files = glob.glob(os.path.join(input_dir, '*.ovf'))
     mat_files = []
 
+    # Group files by quantity name
     q_dict = {}
     for f in ovf_files:
         # Get quantity name (filename except digits at the end)
-        match = re.match(r'(.*?)\d+$', get_filename(f))
+        match = re.match(r'(.*?)\d*$', get_filename(f))
         if match:
             q_name = match.group(1)
             f_list = q_dict.get(q_name, [])
