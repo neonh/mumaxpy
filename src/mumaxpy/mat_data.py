@@ -109,8 +109,8 @@ class MatFileData(ABC):
                  quantity: Quantity,
                  data: np.ndarray,
                  title: Optional[str] = None,
-                 parameters: Optional[Dict[str, Tuple[float, str]]] = None,
-                 extra: Optional[Dict] = None,
+                 parameters: Dict[str, Tuple[float, str]] = {},
+                 extra: Dict[str, str] = {},
                  file: Optional[Path] = None) -> None:
         self._file = file
 
@@ -186,7 +186,7 @@ class MatFileData(ABC):
                           for key, val in zip(extra_st.dtype.names,
                                               extra_st)}
         else:
-            extra_dict = None
+            extra_dict = {}
 
         obj = subclass(time, grid, quantity, data, title,
                        parameters_dict, extra_dict, file)
@@ -401,6 +401,34 @@ class MatFileData(ABC):
             self.grid.nodes[i] = len(c)
             self.grid.coord[i] = c[0] - self.grid.step[i]/2
 
+    def get_ex_param(self, param_name: str) -> Union[u.Quantity, str, None]:
+        """
+        Returns parameter from extra data as Quantity if possible
+        """
+        s = self.extra.get(param_name)
+        if s is not None:
+            try:
+                q = u.Quantity(s)
+            except TypeError:
+                q = s
+        else:
+            q = None
+        return q
+
+    def get_ex_param_value(self, param_name: str,
+                           unit: Optional[str] = None) -> float:
+        """
+        Returns parameter value from extra data, converted to specified unit
+        """
+        q = self.get_ex_param(param_name)
+        if isinstance(q, u.Quantity):
+            if unit is not None:
+                q = q.to(unit)
+            val = q.value
+        else:
+            val = np.nan
+        return val
+
     def _get_plot_title(self, normal: Optional[Ax] = None,
                         layer_index: Optional[int] = None) -> str:
         title = f'{self.quantity}'
@@ -570,7 +598,7 @@ class ScalarData(MatFileData):
         else:
             q = u.Quantity(other).to(self.quantity.unit)
             data = self.data + q.value
-            title = f'{self.title}+{other}'
+            title = f'{self.title} + {other}'
             q_name = f'{self.quantity.name}+{other}'
         return ScalarData(self.time, self.grid,
                           Quantity(q_name, self.quantity.unit), data, title,
