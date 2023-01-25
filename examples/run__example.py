@@ -290,4 +290,5 @@ if __name__ == "__main__":
                      p, v, pre_run, post_run,
                      data_process_func, add_output,
                      verify, post_processing,
-                     comment)
+                     comment,
+                     plot_geom=True)
