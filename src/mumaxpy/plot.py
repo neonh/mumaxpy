@@ -150,22 +150,15 @@ def animate_2D(time: np.ndarray, time_unit: str,
     fig.subplots_adjust(left=H_MARGIN, right=1-H_MARGIN,
                         bottom=V_MARGIN, top=1-H_MARGIN)
 
+    # Create animation
+    def animate(i):
+        slider.set_val(time[i])
+        return im
+
+    anim = animation.FuncAnimation(fig, animate,
+                                   interval=frame_interval,
+                                   frames=len(data)-1)
     if file is not None:
-        # Create animation
-        def animate(i):
-            slider.set_val(time[i])
-            return im
-
-        anim = animation.FuncAnimation(fig, animate,
-                                       interval=frame_interval,
-                                       frames=len(data)-1)
         anim.save(file)
-
-        # Stop animation
-        fig.canvas.flush_events()
-        anim.event_source.stop()
-
-    # Go to end time
-    slider.set_val(time[-1])
 
     return ax
