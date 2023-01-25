@@ -2,8 +2,8 @@
 Class with various functions for parameters verification
 """
 # %% Imports
-from astropy import units as u
 from typing import Optional
+from astropy import units as u
 
 
 # %% Constants

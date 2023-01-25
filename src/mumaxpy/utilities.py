@@ -5,11 +5,13 @@ Utilities
 import os
 import glob
 import re
-import yaml
 import tkinter.filedialog
 import tkinter as tk
+from dataclasses import dataclass
+from typing import Optional, List, Tuple, Dict, Union, Iterable
+import pandas as pd
+import yaml
 from astropy import units as u
-from typing import Optional, List, Tuple, Dict, Union
 
 
 # %% Types
@@ -21,6 +23,16 @@ Path = str
 # %% Constants
 OS_FORBIDDEN_CHARS = r'<>:"/\|?*'
 FORBIDDEN_CHARS = OS_FORBIDDEN_CHARS + ';$#\'"`'
+
+
+# %% Classes
+@dataclass
+class NumberFormat:
+    width: int
+    precision: int
+    exponent: int = 0
+    sign: str = ''
+    fill: str = '0'
 
 
 # %% Functions
@@ -69,6 +81,14 @@ def remove_forbidden_chars(s: str) -> str:
     return out
 
 
+def get_valid_dirname(s: str) -> str:
+    """ Remove forbidden chars, strip spaces and replace dot at the end """
+    out = remove_forbidden_chars(s).strip()
+    if out[-1] == '.':
+        out = out[:-1] + '!'
+    return out
+
+
 def get_name_and_unit_from_str(s: str) -> Tuple[str, str]:
     """
     'Amp, urad' -> ('Amp', 'urad')
@@ -90,6 +110,34 @@ def extract_parameters(s: str) -> Dict[str, Tuple[float, str]]:
     for param, value, unit in m:
         param_dict[param] = (float(value), unit)
     return param_dict
+
+
+def read_dat_file(file: Path) -> Tuple[pd.DataFrame, Dict[str, str]]:
+    """ Read dataframe and units from dat-file """
+    with open(file) as f:
+        # First row - variable names
+        header = f.readline().split()
+        # Second row - units
+        units = f.readline().split()
+        # Third row (optional) - comments, contains values for second index
+        comments = f.readline().split('=')
+
+    units_dict = {key: val for key, val in zip(header, units)}
+
+    if len(comments) > 1:
+        subheader_name_str = comments[0].strip()
+        sh_name, sh_unit = get_name_and_unit_from_str(subheader_name_str)
+        # Add to units dict
+        units_dict[sh_name] = sh_unit
+        # Subheader index values
+        subheader = [float(x) for x in comments[1].split()]
+        df = pd.read_csv(file, sep='\t', header=[0], skiprows=[1, 2],
+                         index_col=0)
+        df.columns = pd.MultiIndex.from_arrays([header[1:], subheader],
+                                               names=('', sh_name))
+    else:
+        df = pd.read_csv(file, sep='\t', header=0, skiprows=[1])
+    return df, units_dict
 
 
 def create_hidden_window() -> tk.Tk:
@@ -121,3 +169,84 @@ def msgbox(message: str,
     ans = messagebox(parent=root, message=message, title=title, icon=icon)
     root.destroy()
     return ans
+
+
+def find_common_number_format(numbers: Iterable[float]) -> NumberFormat:
+    """
+    Find suitable format to print all of the numbers to strings
+    of equal lengths and precisions
+    """
+    # Strings in scientific format
+    slist = [f'{x:e}' for x in numbers]
+
+    # Sign
+    sign = ''
+    # Integer part
+    d = []
+    # Fractional part
+    f = []
+    # Exponent
+    e = []
+    for s in slist:
+        m = re.search(r'(-)?(\d+)(?:\.(\d+))?(e[+|-]?\d+)?', s)
+        if m.group(1) is not None:
+            sign = '+'
+        d += [len(m.group(2))]
+        if m.group(3) is not None:
+            f += [len(m.group(3).rstrip('0'))]
+        else:
+            f += [0]
+        if m.group(4) is not None:
+            e += [int(m.group(4)[1:])]
+        else:
+            e += [0]
+
+    # Find common exponent if possible
+    min_e = min(e)
+    max_e = max(e)
+    if max_e - min_e > 6:
+        common_exp = None
+    else:
+        if max_e < 5 and min_e > -5:
+            common_exp = 0
+        else:
+            # Choose closest 3*N value
+            common_exp = (min_e // 3) * 3
+        d = [d[i] + (e[i] - common_exp) for i in range(len(d))]
+        f = [f[i] - (e[i] - common_exp) for i in range(len(f))]
+
+    int_len = max(d)
+    frac_len = max(f)
+    if frac_len < 0:
+        frac_len = 0
+
+    fmt = NumberFormat(sign=sign,
+                       width=len(sign) + int_len + frac_len + (frac_len > 0),
+                       precision=frac_len,
+                       exponent=common_exp)
+    return fmt
+
+
+def number_to_str(number: float, fmt: Optional[NumberFormat] = None) -> str:
+    """Print number using specified format"""
+    if fmt is None:
+        out = f'{number:g}'
+    else:
+        s = '+' if fmt.sign else ''
+        w = fmt.width
+        p = fmt.precision
+        e = fmt.exponent
+        f = fmt.fill
+
+        if e is None:
+            # Scientific format
+            out = f'{number:{f}={s}{w}.{p}e}'
+        elif e == 0:
+            # Float format
+            out = f'{number:{f}={s}{w}.{p}f}'
+        else:
+            # Scientific format with fixed exponent value
+            n = number / 10**fmt.exp
+            out = f'{n:{f}={s}{w}.{p}f}e{e:+d}'
+
+    return out

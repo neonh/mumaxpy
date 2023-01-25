@@ -1,18 +1,20 @@
 """
 Process data from .mat file
 """
-import numpy as np
+# %% Imports
 import os
-import matplotlib.pyplot as plt
 from abc import ABC, abstractmethod
-from scipy.io import loadmat, savemat
-from astropy import units as u
 from dataclasses import dataclass
 from itertools import zip_longest
-from typing import List, Tuple, Dict, Iterable, Callable, Optional
-from .utilities import extract_parameters, get_filename
-from .signal import Signal
-from .plot import plot_2D, animate_2D
+from typing import List, Tuple, Dict, Iterable, Callable, Union, Optional
+import numpy as np
+from scipy.io import loadmat, savemat
+import matplotlib.pyplot as plt
+from astropy import units as u
+
+from mumaxpy.utilities import extract_parameters, get_filename
+from mumaxpy.signal import Signal
+from mumaxpy.plot import plot_2D, plot_3D, animate_2D
 
 
 # %% Types
@@ -107,8 +109,8 @@ class MatFileData(ABC):
                  quantity: Quantity,
                  data: np.ndarray,
                  title: Optional[str] = None,
-                 parameters: Optional[Dict[str, Tuple[float, str]]] = None,
-                 extra: Optional[Dict] = None,
+                 parameters: Dict[str, Tuple[float, str]] = {},
+                 extra: Dict[str, str] = {},
                  file: Optional[Path] = None) -> None:
         self._file = file
 
@@ -177,10 +179,17 @@ class MatFileData(ABC):
 
         parameters_dict = extract_parameters(get_filename(file))
 
-        extra_struct = mat_dict['extra'][0][0] if 'extra' in mat_dict else None
+        if 'extra' in mat_dict:
+            # Convert structured numpy array to dict
+            extra_st = mat_dict['extra'][0][0]
+            extra_dict = {key: str(val[0])
+                          for key, val in zip(extra_st.dtype.names,
+                                              extra_st)}
+        else:
+            extra_dict = {}
 
         obj = subclass(time, grid, quantity, data, title,
-                       parameters_dict, extra_struct, file)
+                       parameters_dict, extra_dict, file)
         return obj
 
     def save(self, file: Optional[Path] = None) -> None:
@@ -250,8 +259,6 @@ class MatFileData(ABC):
             self.grid.step *= multiplier
             self.grid.coord *= multiplier
 
-    # TODO
-    # def apply(self, func):
     def convert_quantity(self,
                          convert_func:
                              Callable[[Tuple[np.ndarray, Quantity]],
@@ -260,6 +267,9 @@ class MatFileData(ABC):
 
     def get_shape(self) -> Tuple:
         return self.data.shape
+
+    def get_grid_size(self) -> np.ndarray:
+        return self.grid.size
 
     def get_time_data(self, mesh: bool = False) -> np.ndarray:
         """ Return time values
@@ -391,7 +401,35 @@ class MatFileData(ABC):
             self.grid.nodes[i] = len(c)
             self.grid.coord[i] = c[0] - self.grid.step[i]/2
 
-    def _get_plot_title(self, normal: Ax,
+    def get_ex_param(self, param_name: str) -> Union[u.Quantity, str, None]:
+        """
+        Returns parameter from extra data as Quantity if possible
+        """
+        s = self.extra.get(param_name)
+        if s is not None:
+            try:
+                q = u.Quantity(s)
+            except TypeError:
+                q = s
+        else:
+            q = None
+        return q
+
+    def get_ex_param_value(self, param_name: str,
+                           unit: Optional[str] = None) -> float:
+        """
+        Returns parameter value from extra data, converted to specified unit
+        """
+        q = self.get_ex_param(param_name)
+        if isinstance(q, u.Quantity):
+            if unit is not None:
+                q = q.to(unit)
+            val = q.value
+        else:
+            val = np.nan
+        return val
+
+    def _get_plot_title(self, normal: Optional[Ax] = None,
                         layer_index: Optional[int] = None) -> str:
         title = f'{self.quantity}'
 
@@ -447,15 +485,38 @@ class VectorData(MatFileData):
 
     @property
     def x(self):
-        return self.get_component('x')
+        return self.get_component(X)
 
     @property
     def y(self):
-        return self.get_component('y')
+        return self.get_component(Y)
 
     @property
     def z(self):
-        return self.get_component('z')
+        return self.get_component(Z)
+
+    def apply(self, func: Callable[[float, ...], float],
+              components: Tuple[str] = ('x', 'y', 'z'),
+              quantity_name: Optional[str] = None,
+              unit: Optional[str] = None) -> 'ScalarData':
+        """ Apply function to all data values
+
+        Used vector components specified in components argument
+        Function should have number of arguments equal to len(components)
+        Returns: ScalarData
+        """
+        data_list = [self.get_data(ax) for ax in components]
+        data = np.vectorize(func)(*data_list)
+        q_unit = self.quantity.unit if unit is None else unit
+        if quantity_name is None:
+            q_name = self.quantity.name
+            title = self.title
+        else:
+            q_name = quantity_name
+            title = f'{quantity_name}_{self.title}'
+        return ScalarData(self.time, self.grid,
+                          Quantity(q_name, q_unit), data, title,
+                          self.parameters, self.extra)
 
     def is_vector(self) -> bool:
         return True
@@ -478,6 +539,18 @@ class VectorData(MatFileData):
             err = f'{self.quantity.name} has no {component}-component'
             raise RuntimeError(err)
         return obj
+
+    def plot(self, *args, **kwargs) -> List[plt.Axes]:
+        axes = []
+        for c in self.quantity.components:
+            scalar = self.get_component(c)
+            axes += [scalar.plot(*args, **kwargs)]
+        return axes
+
+    def plot_volume(self, *args, **kwargs) -> None:
+        for c in self.quantity.components:
+            scalar = self.get_component(c)
+            scalar.plot_volume(*args, **kwargs)
 
     def plot_amplitude(self, *args, **kwargs) -> List[plt.Axes]:
         axes = []
@@ -516,7 +589,7 @@ class ScalarData(MatFileData):
         parameters: dict of parameters names and values from the filename
     """
 
-    def __add__(self, other):
+    def __add__(self, other: Union[float, 'ScalarData']) -> 'ScalarData':
         if isinstance(other, ScalarData):
             conv = u.Unit(other.quantity.unit).to(self.quantity.unit)
             data = self.data + other.data * conv
@@ -525,13 +598,13 @@ class ScalarData(MatFileData):
         else:
             q = u.Quantity(other).to(self.quantity.unit)
             data = self.data + q.value
-            title = f'{self.title}+{other}'
+            title = f'{self.title} + {other}'
             q_name = f'{self.quantity.name}+{other}'
         return ScalarData(self.time, self.grid,
                           Quantity(q_name, self.quantity.unit), data, title,
                           self.parameters, self.extra)
 
-    def __sub__(self, other):
+    def __sub__(self, other: Union[float, 'ScalarData']) -> 'ScalarData':
         if isinstance(other, ScalarData):
             conv = u.Unit(other.quantity.unit).to(self.quantity.unit)
             data = self.data - other.data * conv
@@ -546,7 +619,7 @@ class ScalarData(MatFileData):
                           Quantity(q_name, self.quantity.unit), data, title,
                           self.parameters, self.extra)
 
-    def __mul__(self, other):
+    def __mul__(self, other: Union[float, 'ScalarData']) -> 'ScalarData':
         if isinstance(other, ScalarData):
             data = self.data * other.data
             title = f'{self.title} * {other.title}'
@@ -563,10 +636,10 @@ class ScalarData(MatFileData):
                           Quantity(q_name, q_unit), data, title,
                           self.parameters, self.extra)
 
-    def __rmul__(self, other):
+    def __rmul__(self, other: Union[float, 'ScalarData']) -> 'ScalarData':
         return self * other
 
-    def __truediv__(self, other):
+    def __truediv__(self, other: Union[float, 'ScalarData']) -> 'ScalarData':
         if isinstance(other, ScalarData):
             data = self.data / other.data
             title = f'{self.title} / {other.title}'
@@ -583,12 +656,80 @@ class ScalarData(MatFileData):
                           Quantity(q_name, q_unit), data, title,
                           self.parameters, self.extra)
 
+    def apply(self, func: Callable[[float], float],
+              quantity_name: Optional[str] = None,
+              unit: Optional[str] = None) -> 'ScalarData':
+        """ Apply function to all data values """
+        data = np.vectorize(func)(self.data)
+        q_unit = self.quantity.unit if unit is None else unit
+        if quantity_name is None:
+            q_name = self.quantity.name
+            title = self.title
+        else:
+            q_name = quantity_name
+            title = f'{quantity_name}_{self.title}'
+        return ScalarData(self.time, self.grid,
+                          Quantity(q_name, q_unit), data, title,
+                          self.parameters, self.extra)
+
     def is_vector(self) -> bool:
         return False
 
     def get_component(self, component: Ax) -> 'ScalarData':
         # Ignore component
         return self
+
+    def plot(self, time_index: int = 0,
+             normal: Ax = Z,
+             layer_index: Optional[int] = None,
+             cmap: str = 'bwr',
+             vmin: Optional[float] = None,
+             vmax: Optional[float] = None,
+             *,
+             add_plot_func: Optional[Callable] = None,
+             save_path: Optional[Path] = None,
+             extension: str = 'png') -> plt.Axes:
+        title = self._get_plot_title(normal, layer_index)
+        file = self._get_plot_filepath(save_path, extension)
+        axes = [ax for ax in XYZ if ax != normal]
+        axes_data = [self.get_axis_data(ax, mesh=True) for ax in axes]
+
+        data = self.get_planar_data(normal, layer_index)
+        data = np.take(data, time_index, axis=AX_NUM[T])
+
+        ax = plot_2D(axes_data[0], axes_data[1], data,
+                     xlabel=f'{axes[0]}, {self.grid.unit}',
+                     ylabel=f'{axes[1]}, {self.grid.unit}',
+                     title=title,
+                     cmap=cmap,
+                     vmin=vmin, vmax=vmax,
+                     add_plot_func=add_plot_func,
+                     file=file)
+        return ax
+
+    def plot_volume(self, time_index: int = 0,
+                    cmap: str = 'Plasma',
+                    opacity: float = 0.5,
+                    surf_count: int = 3,
+                    *,
+                    save_path: Optional[Path] = None) -> None:
+        title = self._get_plot_title()
+        file = self._get_plot_filepath(save_path, 'html')
+        axes = list(XYZ.keys())
+        axes_data = [self.get_axis_data(ax, mesh=False) for ax in axes]
+
+        data = np.take(self.data, time_index, axis=AX_NUM[T])
+
+        plot_3D(axes_data[0], axes_data[1], axes_data[2], data,
+                xlabel=f'{axes[0]}, {self.grid.unit}',
+                ylabel=f'{axes[1]}, {self.grid.unit}',
+                zlabel=f'{axes[2]}, {self.grid.unit}',
+                title=title,
+                cmap=cmap,
+                opacity=opacity,
+                surf_count=surf_count,
+                file=file)
+        return None
 
     def plot_amplitude(self, normal: Ax = Z,
                        layer_index: Optional[int] = None,

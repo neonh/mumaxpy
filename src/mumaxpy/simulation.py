@@ -1,16 +1,19 @@
 """
 Simulation class
 """
+# %% Imports
 import os
 import re
 from datetime import datetime
-import matplotlib.pyplot as plt
 import shutil
 import subprocess
 import numpy as np
 import pandas as pd
-from .ovf import ovf_to_mat
-from .utilities import get_name_and_unit_from_str, remove_forbidden_chars
+import matplotlib.pyplot as plt
+
+from mumaxpy.ovf import ovf_to_mat
+from mumaxpy.utilities import (get_name_and_unit_from_str,
+                               get_valid_dirname, number_to_str)
 
 
 # %% Config
@@ -124,7 +127,7 @@ class Simulation:
             sub_dir_name += f'_{comment}'
         result_dir = os.path.join(self.data_dir,
                                   script_name,
-                                  remove_forbidden_chars(sub_dir_name))
+                                  get_valid_dirname(sub_dir_name))
         if not os.path.exists(result_dir):
             os.makedirs(result_dir)
         return result_dir
@@ -143,12 +146,12 @@ class Simulation:
             sub_dirs_dict.update({name: sub_dir})
         return sub_dirs_dict
 
-    def _run_mx3_script(self, script_file, script):
-        with open(script_file, 'w') as f:
-            f.write(script.text())
+    def _run_mx3_script(self, file, script, param_lines_qty = 0):
+        with open(file, 'w') as f:
+            f.write(script)
 
         # Run
-        command = ['mumax3', '-cache', self.cache_dir, script_file]
+        command = ['mumax3', '-cache', self.cache_dir, file]
         ret = subprocess.run(command, capture_output=True, text=True)
         if ret.returncode != 0:
             out_str = f'Mumax returned an error:\n{ret.stderr}'
@@ -158,9 +161,9 @@ class Simulation:
                 err_line = int(m.group(1))
                 out_str += ('\n---' +
                             f'\nCheck line {err_line} '
-                            f'in generated file {script_file}')
+                            f'in generated file {file}')
 
-                tmpl_err_line = err_line - script.get_parameter_lines_qty() - 1
+                tmpl_err_line = err_line - param_lines_qty - 1
                 if tmpl_err_line > 0:
                     out_str += f'\nor line {tmpl_err_line} in template file'
             raise RuntimeError(out_str)
@@ -198,6 +201,28 @@ class Simulation:
     def get_result_data(self):
         return self.df
 
+    def run_geometry_test(self, script, variables=None):
+        output_dir = os.path.join(self.work_dir, f'{script.name}.out')
+        script_file = os.path.join(self.work_dir, f'{script.name}.mx3')
+
+        # Set first value for all variables
+        if variables is not None and len(variables) > 0:
+            v = variables.get_df().index
+            for name, val in zip(v.names, v[0]):
+                script.modify_parameter(name, val)
+        # Run PRE callback
+        if self.callbacks[PRE] is not None:
+            script.parameters = self.callbacks[PRE](script.parameters)
+
+        # Run test geom script
+        self._run_mx3_script(script_file,
+                             script.geom_test_text(),
+                             script.get_parameter_lines_qty())
+        # Convert to mat-file
+        ovf_to_mat(input_dir=output_dir)
+
+        return output_dir
+
     def run(self, script, variables=None, comment=''):
         output_dir = os.path.join(self.work_dir, f'{script.name}.out')
         if os.path.exists(output_dir):
@@ -207,7 +232,7 @@ class Simulation:
         table_file = os.path.join(output_dir, 'table.txt')
 
         var_vals_str = ''
-        if variables is not None:
+        if variables is not None and len(variables) > 0:
             # Dataframe with variables multiindex
             df = variables.get_df()
             var_names = df.index.names
@@ -245,7 +270,7 @@ class Simulation:
             v_list = []
             for i, v in enumerate(var_names):
                 script.modify_parameter(v, var_value[i])
-                v_list += [script.get_parameter_str(v)]
+                v_list += [script.get_parameter_str(v, variables.get(v).fmt)]
             var_str = ', '.join(v_list)
             if len(v_list) > 0 and v_list[0] != '':
                 fvar_str = '_{' + '}_{'.join(v_list).replace(' ', '') + '}'
@@ -258,7 +283,9 @@ class Simulation:
 
             # Run
             print(f'#{iter_num:2} of {iter_qty} | {var_str}')
-            self._run_mx3_script(script_file, script)
+            self._run_mx3_script(script_file,
+                                 script.text(),
+                                 script.get_parameter_lines_qty())
 
             time = datetime.now()
             duration_str = str(time - prev_time).split('.')[0]
@@ -290,7 +317,8 @@ class Simulation:
             out_dir = os.path.join(sub_dirs[MAT_FILES], *v_list[:-1])
             ovf_to_mat(input_dir=output_dir,
                        output_dir=out_dir,
-                       filename_suffix=fvar_str)
+                       filename_suffix=fvar_str,
+                       extra_data=script.parameters.get_param_dict())
 
             # %% Get table data
             table_df, table_units = self._get_table_data(table_copy_file)
@@ -305,7 +333,7 @@ class Simulation:
                              fname=fvar_str)
 
             # %% Process table data
-            if self.process_func is not None:
+            if self.process_func is not None and var_qty > 0:
                 res_dict = self.process_func(table_df, table_units,
                                              script.parameters)
 
@@ -349,9 +377,9 @@ class Simulation:
         # %% Plot and save all graphs
         if var_qty > 0:
             self._plot_results(df, sub_dirs[RESULTS])
-        # Save current data plot
-        fig.tight_layout()
-        fig.savefig(os.path.join(self.result_dir, 'data.png'))
+            # Save current data plot
+            fig.tight_layout()
+            fig.savefig(os.path.join(self.result_dir, 'data.png'))
 
         # %% Save results data organized into folders
         if var_qty > 1:
@@ -369,7 +397,9 @@ class Simulation:
 
             # Split data by folders (\<var_name>=<var_value> <var_unit>\)
             for val in var_vals:
-                sub_dirs_list = [f'{x[0]}={x[1]:.2f} {x[2]}'
+                sub_dirs_list = [f'{x[0]}='
+                                 + number_to_str(x[1], variables.get(x[0]).fmt)
+                                 + f' {x[2]}'
                                  for x in zip(var_names[:-2],
                                               val, var_units[:-2])]
                 out_dir = os.path.join(sub_dirs[RESULTS], *sub_dirs_list)

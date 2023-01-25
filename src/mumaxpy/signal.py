@@ -1,13 +1,14 @@
 """
 Signal class
 """
+# %% Imports
 import os
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from scipy import fftpack
 from dataclasses import dataclass
 from typing import Optional, Any
+import matplotlib.pyplot as plt
+from scipy import fftpack
 
 
 # %% Constants

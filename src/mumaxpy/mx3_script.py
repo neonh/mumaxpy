@@ -1,10 +1,11 @@
 """
 Script configuration classes
 """
+# %% Imports
 import re
 from astropy import units as u
-from .material import Material
-from .utilities import get_unit, get_filename
+from mumaxpy.material import Material
+from mumaxpy.utilities import get_unit, get_filename, number_to_str
 
 # Add Oersted unit
 if not hasattr(u, 'Oe'):
@@ -107,6 +108,9 @@ class Parameters:
         s = '\n'.join(param_list) + '\n'
         return s
 
+    def get_param_dict(self):
+        return {name: str(val) for name, val in vars(self).items()}
+
     def __str__(self):
         s = ''
         for name, val in vars(self).items():
@@ -170,10 +174,10 @@ class Script:
             unit = ''
         return unit
 
-    def get_parameter_str(self, parameter):
+    def get_parameter_str(self, parameter, fmt=None):
         if parameter is not None:
             value = getattr(self.parameters, parameter)
-            s = f'{parameter}={value:.2f}'
+            s = f'{parameter}=' + number_to_str(value, fmt)
         else:
             s = ''
         return s
@@ -187,6 +191,21 @@ class Script:
         else:
             param_str = ''
         text = '\n'.join([param_str, self.script])
+        return text
+
+    def geom_test_text(self):
+        """ Returns first part of script - up to SetGeom function
+        and insert Save(geom) to save geometry file """
+        if self.parameters is not None:
+            param_str = self.parameters.get_param_str()
+        else:
+            param_str = ''
+
+        script = self.script
+        m = re.search(r'setgeom\(.*\)', self.script, re.IGNORECASE)
+        script = self.script[:m.end()]
+        script += '\nSave(geom)\n'
+        text = '\n'.join([param_str, script])
         return text
 
     def save(self, file):

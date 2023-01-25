@@ -3,9 +3,10 @@ Script for easy data processing
 """
 # %% Imports
 import os
+from typing import Optional
 import numpy as np
 import matplotlib.pyplot as plt
-from typing import Optional
+
 from mumaxpy.utilities import get_filename, get_files_list
 from mumaxpy.mat_data import MatFileData
 
@@ -89,6 +90,13 @@ class MatFilesProcessor:
                 args, kwargs = self.methods['convert_units']
                 m.convert_units(*args, **kwargs)
 
+            # Create plot
+            if 'plot' in self.methods:
+                args, kwargs = self.methods['plot']
+                kwargs['save_path'] = out_folder
+                ax = m.plot(*args, **kwargs)
+                axes += ax if isinstance(ax, list) else [ax]
+
             # Create amplitude plot
             if 'plot_amplitude' in self.methods:
                 args, kwargs = self.methods['plot_amplitude']
@@ -151,6 +159,9 @@ class MatFilesProcessor:
 
     def convert_units(self, *args, **kwargs) -> None:
         self.methods['convert_units'] = (args, kwargs)
+
+    def plot(self, *args, **kwargs) -> None:
+        self.methods['plot'] = (args, kwargs)
 
     def plot_amplitude(self, *args, **kwargs) -> None:
         self.methods['plot_amplitude'] = (args, kwargs)

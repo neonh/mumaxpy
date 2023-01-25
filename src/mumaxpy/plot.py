@@ -1,11 +1,14 @@
 """
 Plot functions
 """
+# %% Imports
+from typing import Tuple, Callable, Optional
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from matplotlib.widgets import Slider
-from typing import Tuple, Callable, Optional
+from plotly.offline import plot
+import plotly.graph_objects as go
 
 
 # %% Types
@@ -48,8 +51,8 @@ def plot_2D(x: np.ndarray, y: np.ndarray, data: np.ndarray,
             add_plot_func: Optional[Callable] = None,
             file: Path = None) -> plt.Axes:
     fig, ax = plt.subplots(figsize=get_fig_size(x, y))
-    xm, ym = np.meshgrid(x, y)
-    im = ax.pcolormesh(xm, ym, np.transpose(data),
+    xm, ym = np.meshgrid(x, y, indexing='ij')
+    im = ax.pcolormesh(xm, ym, data,
                        cmap=cmap,
                        vmin=vmin, vmax=vmax,
                        shading='auto')
@@ -70,6 +73,35 @@ def plot_2D(x: np.ndarray, y: np.ndarray, data: np.ndarray,
     return ax
 
 
+def plot_3D(x: np.ndarray, y: np.ndarray, z: np.ndarray, data: np.ndarray,
+            xlabel: str = '', ylabel: str = '', zlabel: str = '',
+            title: str = '',
+            cmap: str = 'Plasma',
+            opacity: float = 0.5,
+            surf_count: int = 3,
+            file: Path = None) -> None:
+    xm, ym, zm = np.meshgrid(x, y, z, indexing='ij')
+    fig = go.Figure(data=go.Volume(x=xm.flatten(),
+                                   y=ym.flatten(),
+                                   z=zm.flatten(),
+                                   value=data.flatten(),
+                                   opacity=opacity,
+                                   colorscale=cmap,
+                                   surface_count=surf_count,
+                                   ))
+    fig.update_layout(title=title,
+                      scene=dict(xaxis=dict(title=xlabel),
+                                 yaxis=dict(title=ylabel),
+                                 zaxis=dict(title=zlabel)),
+                      scene_aspectmode='data')
+    fig.update_layout(autosize=True)
+
+    if file is not None:
+        plot(fig, filename=file)
+    else:
+        plot(fig)
+
+
 def animate_2D(time: np.ndarray, time_unit: str,
                x: np.ndarray, y: np.ndarray, data: np.ndarray,
                xlabel: str = '', ylabel: str = '', title: str = '',
@@ -87,8 +119,8 @@ def animate_2D(time: np.ndarray, time_unit: str,
     fig, (ax, axtime) = plt.subplots(nrows=2, figsize=get_fig_size(x, y),
                                      gridspec_kw={'height_ratios':
                                                   [1-H_SLIDER, H_SLIDER]})
-    xm, ym = np.meshgrid(x, y)
-    im = ax.pcolormesh(xm, ym, np.transpose(data[0]),
+    xm, ym = np.meshgrid(x, y, indexing='ij')
+    im = ax.pcolormesh(xm, ym, data[0],
                        cmap=cmap,
                        vmin=vmin, vmax=vmax,
                        shading='auto')
@@ -110,7 +142,7 @@ def animate_2D(time: np.ndarray, time_unit: str,
     def update(val):
         # ax.set_title(f'{title} [t = {time[i]:.2f} {time_unit}]')
         i = np.searchsorted(time, slider.val, side='left')
-        im.set_array(np.transpose(data[i]).flatten())
+        im.set_array(data[i].flatten())
         fig.canvas.draw()
 
     slider.on_changed(update)
@@ -118,22 +150,15 @@ def animate_2D(time: np.ndarray, time_unit: str,
     fig.subplots_adjust(left=H_MARGIN, right=1-H_MARGIN,
                         bottom=V_MARGIN, top=1-H_MARGIN)
 
+    # Create animation
+    def animate(i):
+        slider.set_val(time[i])
+        return im
+
+    anim = animation.FuncAnimation(fig, animate,
+                                   interval=frame_interval,
+                                   frames=len(data)-1)
     if file is not None:
-        # Create animation
-        def animate(i):
-            slider.set_val(time[i])
-            return im
-
-        anim = animation.FuncAnimation(fig, animate,
-                                       interval=frame_interval,
-                                       frames=len(data)-1)
         anim.save(file)
-
-        # Stop animation
-        fig.canvas.flush_events()
-        anim.event_source.stop()
-
-    # Go to end time
-    slider.set_val(time[-1])
 
     return ax
