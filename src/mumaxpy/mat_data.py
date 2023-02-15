@@ -295,23 +295,23 @@ class MatFileData(ABC):
             i = XYZ[axis]
             if mesh is False:
                 base = self.grid.coord[i] + self.grid.step[i]/2
-                ax_data = np.r_[base: base + self.grid.size[i]:
-                                self.grid.step[i]]
+                ax_data = np.r_[0: self.grid.size[i] - self.grid.step[i]:
+                                1j*self.grid.nodes[i]] + base
             else:
                 base = self.grid.coord[i]
-                ax_data = np.r_[base: base + self.grid.size[i]:
-                                1j*(self.grid.nodes[i] + 1)]
+                ax_data = np.r_[0: self.grid.size[i]:
+                                1j*(self.grid.nodes[i] + 1)] + base
         return ax_data
 
     def find_index(self, axis: Ax, value: float) -> int:
         """ Return nearest index """
         ax_data = self.get_axis_data(axis, mesh=True)
-        if (value > ax_data[-1]) or (value < ax_data[0]):
-            raise ValueError('Value is out of range')
+        if value <= ax_data[0]:
+            idx = 0
+        elif value >= ax_data[-1]:
+            idx = len(ax_data) - 2
         else:
             idx = np.searchsorted(ax_data, value) - 1
-            if idx < 0:
-                idx = 0
         return idx
 
     def get_data(self, component: Optional[Ax] = None) -> np.ndarray:
