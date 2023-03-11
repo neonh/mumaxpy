@@ -281,7 +281,7 @@ class MatFileData(ABC):
         else:
             time = self.time.values
             dt = (time[-1] - time[0]) / time.size
-            t_data = [time] + [time[-1] + dt]
+            t_data = np.append(time, time[-1] + dt)
         return t_data
 
     def get_axis_data(self, axis: Ax, mesh: bool = False) -> np.ndarray:
