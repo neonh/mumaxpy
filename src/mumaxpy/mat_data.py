@@ -281,7 +281,7 @@ class MatFileData(ABC):
         else:
             time = self.time.values
             dt = (time[-1] - time[0]) / time.size
-            t_data = [time] + [time[-1] + dt]
+            t_data = np.append(time, time[-1] + dt)
         return t_data
 
     def get_axis_data(self, axis: Ax, mesh: bool = False) -> np.ndarray:
@@ -295,23 +295,23 @@ class MatFileData(ABC):
             i = XYZ[axis]
             if mesh is False:
                 base = self.grid.coord[i] + self.grid.step[i]/2
-                ax_data = np.r_[base: base + self.grid.size[i]:
-                                self.grid.step[i]]
+                ax_data = np.r_[0: self.grid.size[i] - self.grid.step[i]:
+                                1j*self.grid.nodes[i]] + base
             else:
                 base = self.grid.coord[i]
-                ax_data = np.r_[base: base + self.grid.size[i]:
-                                1j*(self.grid.nodes[i] + 1)]
+                ax_data = np.r_[0: self.grid.size[i]:
+                                1j*(self.grid.nodes[i] + 1)] + base
         return ax_data
 
     def find_index(self, axis: Ax, value: float) -> int:
         """ Return nearest index """
         ax_data = self.get_axis_data(axis, mesh=True)
-        if (value > ax_data[-1]) or (value < ax_data[0]):
-            raise ValueError('Value is out of range')
+        if value <= ax_data[0]:
+            idx = 0
+        elif value >= ax_data[-1]:
+            idx = len(ax_data) - 2
         else:
             idx = np.searchsorted(ax_data, value) - 1
-            if idx < 0:
-                idx = 0
         return idx
 
     def get_data(self, component: Optional[Ax] = None) -> np.ndarray:
@@ -709,8 +709,10 @@ class ScalarData(MatFileData):
 
     def plot_volume(self, time_index: int = 0,
                     cmap: str = 'Plasma',
-                    opacity: float = 0.5,
-                    surf_count: int = 3,
+                    vmin: Optional[float] = None,
+                    vmax: Optional[float] = None,
+                    opacity: Optional[float] = None,
+                    surf_count: Optional[int] = None,
                     *,
                     save_path: Optional[Path] = None) -> None:
         title = self._get_plot_title()
@@ -726,6 +728,7 @@ class ScalarData(MatFileData):
                 zlabel=f'{axes[2]}, {self.grid.unit}',
                 title=title,
                 cmap=cmap,
+                vmin=vmin, vmax=vmax,
                 opacity=opacity,
                 surf_count=surf_count,
                 file=file)

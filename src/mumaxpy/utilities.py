@@ -94,8 +94,11 @@ def get_name_and_unit_from_str(s: str) -> Tuple[str, str]:
     'Amp, urad' -> ('Amp', 'urad')
     'Amp (urad)' -> ('Amp', 'urad')
     """
-    s = s.replace('(', ',').replace(')', '')
-    splits = s.split(',')
+    COMMA = ','
+    if COMMA in s:
+        splits = s.split(COMMA)
+    else:
+        splits = s.replace(')', '').split('(')
     name = remove_forbidden_chars(splits[0]).strip()
     if len(splits) > 1:
         unit = splits[1].strip()
