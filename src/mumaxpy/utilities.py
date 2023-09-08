@@ -109,7 +109,7 @@ def get_name_and_unit_from_str(s: str) -> Tuple[str, str]:
 
 def extract_parameters(s: str) -> Dict[str, Tuple[float, str]]:
     param_dict = {}
-    m = re.findall(r'(\w*)=([\d|.]*)(\w*)?', s)
+    m = re.findall(r'(\w*)=([+-]?[\d.]*)(\w*)?', s)
     for param, value, unit in m:
         param_dict[param] = (float(value), unit)
     return param_dict
@@ -249,7 +249,10 @@ def number_to_str(number: float, fmt: Optional[NumberFormat] = None) -> str:
             out = f'{number:{f}={s}{w}.{p}f}'
         else:
             # Scientific format with fixed exponent value
-            n = number / 10**fmt.exp
-            out = f'{n:{f}={s}{w}.{p}f}e{e:+d}'
+            n = number / 10**fmt.exponent
+            if isinstance(n, u.Quantity):
+                out = f'{n.value:{f}={s}{w}.{p}f}e{e:+d} {n.unit}'
+            else:
+                out = f'{n:{f}={s}{w}.{p}f}e{e:+d}'
 
     return out

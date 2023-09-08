@@ -17,7 +17,7 @@ Path = str
 
 # %% Constants
 # Figure size in inches
-AX_SIZE_MAX = 7.0
+AX_SIZE_MAX = 14.0
 DELTA_W = 2.0
 DELTA_H = 1.0
 

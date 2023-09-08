@@ -13,11 +13,8 @@ import matplotlib.pyplot as plt
 
 from mumaxpy.ovf import ovf_to_mat
 from mumaxpy.utilities import (get_name_and_unit_from_str,
-                               get_valid_dirname, number_to_str)
-
-
-# %% Config
-plt.rcParams['figure.figsize'] = (10, 8)
+                               get_valid_dirname, number_to_str,
+                               remove_forbidden_chars)
 
 
 # %% Constants
@@ -274,6 +271,7 @@ class Simulation:
             var_str = ', '.join(v_list)
             if len(v_list) > 0 and v_list[0] != '':
                 fvar_str = '_{' + '}_{'.join(v_list).replace(' ', '') + '}'
+                fvar_str = remove_forbidden_chars(fvar_str)
             else:
                 fvar_str = ''
 
