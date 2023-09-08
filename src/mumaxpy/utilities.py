@@ -160,6 +160,21 @@ def choose_folder() -> Path:
     return folder
 
 
+def choose_file(initialfile: Optional[str] = None,
+                defaultextension: Optional[str] = None,
+                filetypes: Iterable = [('All Files', '*.*')]) -> Optional[str]:
+    root = create_hidden_window()
+    # Open dialog
+    file = tk.filedialog.askopenfilename(parent=root,
+                                         initialfile=initialfile,
+                                         defaultextension=defaultextension,
+                                         filetypes=filetypes)
+    root.destroy()
+    if len(file) == 0:
+        file = None
+    return file
+
+
 def msgbox(message: str,
            title: str = '',
            icon: str = 'info',
